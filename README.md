@@ -5,7 +5,7 @@ A lightweight native Windows tool (Rust, raw Win32 + GDI) that graphs your Leagu
 It is two programs:
 
 - **`lp-tracker.exe`** runs in the tray and starts with Windows. It listens to the client's WebSocket and records your exact LP change at the end of every ranked game.
-- **`lp-graph.exe`** is the graph window: a game-by-game LP line with Solo/Duo and Flex, ranges (Last 30, Last 90, This split, All), daily and weekly LP, and a climb rate (your average win and loss LP over your last 3 of each).
+- **`lp-graph.exe`** is the graph window: a game-by-game LP line with Solo/Duo and Flex, ranges (Last 30, Last 90, This split, This season, All), daily and weekly LP, a climb rate (your average win and loss LP over your last 3 of each) and your longest win streak.
 
 Your Riot match history doesn't include LP, so games played before the tracker ran are estimated by walking backwards from your current LP. On the graph:
 
@@ -28,8 +28,10 @@ Then run `bin/lp-tracker.exe` once. It adds itself to Windows startup (turn this
 
 Everything is stored in `bin/data/`, next to the programs:
 
-- `lp.jsonl`: one line per recorded LP change, written only by the tracker
-- `history_cache.json`: cached match history, champion names and the current split's start date
-- `tracker.log`: tracker log, capped at 64 KB
+- `lp.jsonl`: **all your ranked games**, one line each: game ID, champion, win/loss, queue, start time, duration, LP change and rank after the game. Lines are `exact` or `catchup` (recorded by the tracker) or `estimated` (games from before the tracker existed: real result, estimated LP). This is the only file that matters and the only data file in git.
+- `history_cache.json`: a local copy of the client's match history, champion names and season dates. It can be rebuilt from the client at any time, so it isn't committed.
+- `tracker.log`: tracker log, capped at 64 KB. Not committed.
+
+After each recorded game the tracker commits `lp.jsonl` and pushes it to GitHub (tray menu: "Sync to GitHub after each game").
 
 The data lives next to the programs instead of in `%APPDATA%` because Windows redirects AppData writes for programs started by packaged apps, which made different copies of the programs see different data.

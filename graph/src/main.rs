@@ -314,7 +314,11 @@ fn build_series(records: &[Record], cache: &Cache, queue: &str, qid: i64) -> Vec
             abs: r.abs,
             delta: r.delta,
             win: r.win,
-            kind: if r.kind == Kind::Exact { PtKind::Exact } else { PtKind::Catchup },
+            kind: match r.kind {
+                Kind::Exact => PtKind::Exact,
+                Kind::Catchup => PtKind::Catchup,
+                _ => PtKind::Estimated,
+            },
             t,
             champ: r.champ,
         });

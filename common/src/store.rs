@@ -33,6 +33,8 @@ pub enum Kind {
     Exact,
     /// One of several games missed while the tracker was off: total exact, split estimated.
     Catchup,
+    /// Game from before the tracker existed (from match history): result is real, LP is estimated.
+    Estimated,
 }
 
 impl Kind {
@@ -41,12 +43,14 @@ impl Kind {
             Kind::Baseline => "baseline",
             Kind::Exact => "exact",
             Kind::Catchup => "catchup",
+            Kind::Estimated => "estimated",
         }
     }
     fn parse(s: &str) -> Kind {
         match s {
             "exact" => Kind::Exact,
             "catchup" => Kind::Catchup,
+            "estimated" => Kind::Estimated,
             _ => Kind::Baseline,
         }
     }
