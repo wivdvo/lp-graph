@@ -72,6 +72,8 @@ struct Pt {
     kind: PtKind,
     t: i64,
     champ: i64,
+    /// Number of the split this point starts (first game of a new split), else 0.
+    new_split: i64,
 }
 
 #[derive(Default)]
@@ -324,16 +326,21 @@ fn build_series(records: &[Record], cache: &Cache, queue: &str, qid: i64) -> Vec
         .iter()
         .filter(|g| g.queue_id == qid && g.counts() && g.t < anchor_t && !recorded_ids.contains(&g.id))
         .collect();
-    // Walk backwards from the anchor.
-    let mut est = Vec::with_capacity(older.len());
-    let mut cur = anchor_abs;
-    for g in older.iter().rev() {
-        let d = if g.win { avg.0.round() as i64 } else { -(avg.1.round() as i64) };
-        est.push(Pt { abs: cur.max(0), delta: d, win: g.win, kind: PtKind::Estimated, t: g.t, champ: g.champ });
-        cur -= d;
-    }
-    est.reverse();
-    let mut pts = est;
+    // Walk backwards from the anchor, restarting at split resets (only for games that
+    // aren't already stored as estimated records in lp.jsonl, e.g. on a fresh install).
+    let walk = common::estimate::walk_back(
+        &older.iter().map(|g| common::estimate::EstGame { t: g.t, win: g.win }).collect::<Vec<_>>(),
+        anchor_abs,
+        anchor_t,
+        &cache.splits,
+        cache.prev_split_end.get(queue).copied(),
+        avg,
+    );
+    let mut pts: Vec<Pt> = older
+        .iter()
+        .zip(walk)
+        .map(|(g, (abs, d))| Pt { abs, delta: d, win: g.win, kind: PtKind::Estimated, t: g.t, champ: g.champ, new_split: 0 })
+        .collect();
     for r in recs.iter().filter(|r| r.is_game()) {
         // start time stored in the record; older records fall back to the cache, then to the record time
         let t = if r.start > 0 {
@@ -352,7 +359,19 @@ fn build_series(records: &[Record], cache: &Cache, queue: &str, qid: i64) -> Vec
             },
             t,
             champ: r.champ,
+            new_split: 0,
         });
+    }
+    // mark the first game of each split (LP resets there: the line breaks and gets a label)
+    let mut prev = None;
+    for p in pts.iter_mut() {
+        let sp = common::split_at(&cache.splits, p.t);
+        if let (Some(a), Some(b)) = (prev, sp) {
+            if a != b {
+                p.new_split = b.number.max(1);
+            }
+        }
+        prev = sp;
     }
     pts
 }
@@ -847,6 +866,16 @@ fn draw(g: &Gfx, w: i32, h: i32, app: &mut App) {
     for (i, p) in pts.iter().enumerate() {
         let is_est = p.kind == PtKind::Estimated;
         let pt = POINT { x: xpx(i), y: ypx(p.abs) };
+        if p.new_split > 0 && i > 0 {
+            // LP reset at a split start: end the line here, draw a divider, start a new line
+            g.polyline(&seg, if seg_est { LINE_EST } else { LINE }, lw);
+            let x = (xpx(i - 1) + xpx(i)) / 2;
+            g.line(x, plot.top, x, plot.bottom, GRID_TIER, 1, true);
+            g.text(x + s(6.0), plot.bottom - s(18.0), &format!("Split {}", p.new_split), MUTED, f_small, 0);
+            seg = vec![pt];
+            seg_est = is_est;
+            continue;
+        }
         if is_est != seg_est {
             seg.push(pt);
             g.polyline(&seg, if seg_est { LINE_EST } else { LINE }, lw);

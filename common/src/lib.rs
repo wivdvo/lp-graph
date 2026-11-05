@@ -1,6 +1,7 @@
 //! Shared code for lp-tracker and lp-graph: finding the League client,
 //! talking to its local API (LCU) over WinHTTP, rank math and the record file.
 
+pub mod estimate;
 pub mod http;
 pub mod icon;
 pub mod rank;
