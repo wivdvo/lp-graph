@@ -35,6 +35,8 @@ pub enum Kind {
     Catchup,
     /// Game from before the tracker existed (from match history): result is real, LP is estimated.
     Estimated,
+    /// LP lost without a game shortly after champ select: a dodge.
+    Dodge,
 }
 
 impl Kind {
@@ -44,6 +46,7 @@ impl Kind {
             Kind::Exact => "exact",
             Kind::Catchup => "catchup",
             Kind::Estimated => "estimated",
+            Kind::Dodge => "dodge",
         }
     }
     fn parse(s: &str) -> Kind {
@@ -51,6 +54,7 @@ impl Kind {
             "exact" => Kind::Exact,
             "catchup" => Kind::Catchup,
             "estimated" => Kind::Estimated,
+            "dodge" => Kind::Dodge,
             _ => Kind::Baseline,
         }
     }
@@ -109,8 +113,9 @@ impl Record {
         })
     }
 
+    /// A real game (tracked or estimated), not a snapshot or a dodge.
     pub fn is_game(&self) -> bool {
-        self.kind != Kind::Baseline
+        !matches!(self.kind, Kind::Baseline | Kind::Dodge)
     }
 }
 

@@ -41,6 +41,7 @@ const LINE_EST: u32 = rgb(0x34, 0x4c, 0x66);
 const WIN: u32 = rgb(0x3f, 0xb9, 0x50);
 const LOSS: u32 = rgb(0xf8, 0x51, 0x49);
 const EST: u32 = rgb(0x6e, 0x75, 0x80);
+const DODGE: u32 = rgb(0xf0, 0xa0, 0x30);
 
 fn tier_color(tier: &str) -> u32 {
     match tier {
@@ -62,6 +63,8 @@ enum PtKind {
     Estimated,
     Catchup,
     Exact,
+    /// LP lost by dodging champ select: not a game.
+    Dodge,
 }
 
 #[derive(Clone)]
@@ -341,7 +344,7 @@ fn build_series(records: &[Record], cache: &Cache, queue: &str, qid: i64) -> Vec
         .zip(walk)
         .map(|(g, (abs, d))| Pt { abs, delta: d, win: g.win, kind: PtKind::Estimated, t: g.t, champ: g.champ, new_split: 0 })
         .collect();
-    for r in recs.iter().filter(|r| r.is_game()) {
+    for r in recs.iter().filter(|r| r.is_game() || r.kind == Kind::Dodge) {
         // start time stored in the record; older records fall back to the cache, then to the record time
         let t = if r.start > 0 {
             r.start
@@ -355,6 +358,7 @@ fn build_series(records: &[Record], cache: &Cache, queue: &str, qid: i64) -> Vec
             kind: match r.kind {
                 Kind::Exact => PtKind::Exact,
                 Kind::Catchup => PtKind::Catchup,
+                Kind::Dodge => PtKind::Dodge,
                 _ => PtKind::Estimated,
             },
             t,
@@ -530,6 +534,11 @@ impl Gfx {
             DeleteObject(p);
         }
     }
+    /// An "×" marker (used for dodges).
+    fn cross(&self, cx: i32, cy: i32, r: i32, c: u32, w: i32) {
+        self.line(cx - r, cy - r, cx + r + 1, cy + r + 1, c, w, false);
+        self.line(cx - r, cy + r, cx + r + 1, cy - r - 1, c, w, false);
+    }
     fn circle(&self, cx: i32, cy: i32, r: i32, fill: Option<u32>, border: u32, bw: i32) {
         unsafe {
             let p = CreatePen(PS_SOLID, bw, border);
@@ -649,7 +658,7 @@ fn draw(g: &Gfx, w: i32, h: i32, app: &mut App) {
             // falls back to the client's numbers when the split start is unknown
             let split_no = common::split_at(&app.cache.splits, now_ms()).map(|s| s.number).unwrap_or(0);
             let (wins, losses) = if app.cache.split_start > 0 {
-                let in_split = all.iter().filter(|p| p.t >= app.cache.split_start);
+                let in_split = all.iter().filter(|p| p.t >= app.cache.split_start && p.kind != PtKind::Dodge);
                 let w = in_split.clone().filter(|p| p.win).count() as i64;
                 (w, in_split.count() as i64 - w)
             } else {
@@ -752,11 +761,12 @@ fn draw(g: &Gfx, w: i32, h: i32, app: &mut App) {
     g.circle(bx, fy + s(8.0), s(4.0), Some(bc), bc, 1);
     let bend = g.text(bx + s(10.0), fy, &bt, MUTED, f_small, 0);
     // game count for this queue
-    g.text(bend + s(22.0), fy, &format!("{} games ({n_est} estimated)", all.len()), MUTED, f_small, 0);
+    let n_games = all.iter().filter(|p| p.kind != PtKind::Dodge).count();
+    g.text(bend + s(22.0), fy, &format!("{n_games} games ({n_est} estimated)"), MUTED, f_small, 0);
     let status = STATUS.lock().unwrap().clone();
     // legend (right)
     let mut lx = w - s(28.0);
-    for (label, kind) in [("estimated", 0), ("catch-up", 1), ("exact", 2)] {
+    for (label, kind) in [("dodge", 3), ("estimated", 0), ("catch-up", 1), ("exact", 2)] {
         let (lw, _) = g.text_size(label, f_small);
         lx -= lw;
         g.text(lx, fy, label, MUTED, f_small, 0);
@@ -767,6 +777,7 @@ fn draw(g: &Gfx, w: i32, h: i32, app: &mut App) {
             1 => {
                 g.circle(cx, cy, r, Some(PANEL), WIN, s(2.0).max(2));
             }
+            3 => g.cross(cx, cy, r, DODGE, s(2.0).max(2)),
             _ => g.circle(cx, cy, r, Some(WIN), WIN, 1),
         }
         lx -= s(18.0);
@@ -836,11 +847,20 @@ fn draw(g: &Gfx, w: i32, h: i32, app: &mut App) {
         v += step;
     }
 
-    // x-axis game numbers
+    // x-axis game numbers (dodges are points on the line but not games)
+    let game_no: Vec<usize> = all
+        .iter()
+        .scan(0usize, |c, p| {
+            if p.kind != PtKind::Dodge {
+                *c += 1;
+            }
+            Some(*c)
+        })
+        .collect();
     let tick = [1usize, 2, 5, 10, 20, 25, 50, 100, 200].into_iter().find(|&t| n / t <= 10).unwrap_or(500);
     let mut i = 0;
     while i < n {
-        g.text(xpx(i), plot.bottom + s(8.0), &format!("{}", off + i + 1), MUTED, f_small, 1);
+        g.text(xpx(i), plot.bottom + s(8.0), &format!("{}", game_no[off + i]), MUTED, f_small, 1);
         i += tick;
     }
 
@@ -899,6 +919,7 @@ fn draw(g: &Gfx, w: i32, h: i32, app: &mut App) {
                 g.circle(cx, cy, rr + 1, Some(PANEL), c, s(2.0).max(2));
             }
             PtKind::Estimated => g.circle(cx, cy, rr, Some(EST), EST, 1),
+            PtKind::Dodge => g.cross(cx, cy, rr, DODGE, s(2.0).max(2)),
         }
     }
 
@@ -912,12 +933,17 @@ fn draw(g: &Gfx, w: i32, h: i32, app: &mut App) {
         });
         let (t, d, l) = rank::from_abs(p.abs);
         let tag = match p.kind {
-            PtKind::Exact => "",
+            PtKind::Exact | PtKind::Dodge => "",
             PtKind::Catchup => "  (catch-up)",
             PtKind::Estimated => "  (estimated)",
         };
+        let title = if p.kind == PtKind::Dodge {
+            "Dodge  ·  left champ select".to_string()
+        } else {
+            format!("Game {}  ·  {}  ·  {}", game_no[off + i], champ, if p.win { "Win" } else { "Loss" })
+        };
         let lines = [
-            (format!("Game {}  ·  {}  ·  {}", off + i + 1, champ, if p.win { "Win" } else { "Loss" }), TEXT, f_mid_b),
+            (title, TEXT, f_mid_b),
             (format!("{:+} LP{}", p.delta, tag), if p.delta >= 0 { WIN } else { LOSS }, f_mid),
             (format!("→ {}", rank::label(&t, &d, l)), tier_color(&t), f_mid),
             (fmt_time(p.t), MUTED, f_small),
@@ -1252,7 +1278,7 @@ fn day_number(t: &SYSTEMTIME) -> i64 {
 /// Most wins in a row among these games.
 fn longest_win_streak(pts: &[Pt]) -> usize {
     let (mut best, mut cur) = (0, 0);
-    for p in pts {
+    for p in pts.iter().filter(|p| p.kind != PtKind::Dodge) {
         cur = if p.win { cur + 1 } else { 0 };
         best = best.max(cur);
     }

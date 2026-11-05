@@ -8,6 +8,7 @@ use common::{find_process, http::WebSocket, now_ms, wide, Game, Lcu, CLIENT_EXE,
 use serde_json::Value;
 use std::collections::HashSet;
 use std::io::Write;
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::thread::sleep;
 use std::time::Duration;
 use windows_sys::Win32::Foundation::{GetLastError, ERROR_ALREADY_EXISTS};
@@ -18,6 +19,9 @@ use windows_sys::Win32::System::Registry::{
 mod sync;
 mod tray;
 use windows_sys::Win32::System::Threading::CreateMutexW;
+
+/// When the client last entered champ select (unix ms), to recognise dodges.
+static LAST_CHAMP_SELECT: AtomicI64 = AtomicI64::new(0);
 
 const RUN_KEY: &str = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 const RUN_VALUE: &str = "LpTracker";
@@ -156,6 +160,9 @@ fn session(lcu: &Lcu) {
         let ev = &v[2];
         match ev["uri"].as_str().unwrap_or("") {
             "/lol-gameflow/v1/gameflow-phase" => {
+                if ev["data"].as_str() == Some("ChampSelect") {
+                    LAST_CHAMP_SELECT.store(now_ms(), Ordering::Relaxed);
+                }
                 if matches!(ev["data"].as_str(), Some("PreEndOfGame" | "WaitingForStats" | "EndOfGame")) {
                     // LP usually updates within a few seconds of the end screen.
                     for _ in 0..15 {
@@ -194,9 +201,13 @@ fn check(lcu: &Lcu, records: &mut Vec<Record>, stats: Option<Value>) -> bool {
             Some(l) => {
                 let games = (s.wins + s.losses) - (l.wins + l.losses);
                 if games <= 0 {
-                    // No new game. Record LP changes without games (decay, season reset).
+                    // No new game. Record LP changes without games: a dodge (LP lost soon
+                    // after champ select), or decay / season reset.
                     if s.abs != l.abs || games < 0 {
-                        new.push(snapshot(queue, &s, Kind::Baseline, s.abs - l.abs, 0, false, 0));
+                        let since_cs = now_ms() - LAST_CHAMP_SELECT.load(Ordering::Relaxed);
+                        let dodge = games == 0 && s.abs < l.abs && since_cs < 15 * 60_000;
+                        let kind = if dodge { Kind::Dodge } else { Kind::Baseline };
+                        new.push(snapshot(queue, &s, kind, s.abs - l.abs, 0, false, 0));
                     }
                     continue;
                 }
@@ -228,6 +239,7 @@ fn commit_message(new: &[Record]) -> String {
     let rank = common::rank::label(&last.tier, &last.div, last.lp);
     let games: Vec<&Record> = new.iter().filter(|r| r.is_game()).collect();
     match games.len() {
+        0 if last.kind == Kind::Dodge => format!("{queue}: Dodge {:+} LP → {rank}", last.delta),
         0 => format!("{queue}: LP update → {rank}"),
         1 => format!("{queue}: {:+} LP ({}) → {rank}", games[0].delta, if games[0].win { "Win" } else { "Loss" }),
         n => format!("{queue}: {n} games, {:+} LP → {rank}", games.iter().map(|r| r.delta).sum::<i64>()),
