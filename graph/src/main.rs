@@ -664,9 +664,9 @@ fn draw(g: &Gfx, w: i32, h: i32, app: &mut App) {
         }
         None => g.text(s(23.0), cy_, "Climb rate: needs one exact win and one exact loss", MUTED, f_mid, 0),
     };
-    // longest win streak over the games in the selected range (wins/losses are real even for estimates)
-    let x = g.text(climb_end, cy_, &format!("      Longest win streak ({}): ", RANGE_LABELS[app.range]), MUTED, f_mid, 0);
-    g.text(x, cy_, &longest_win_streak(&pts).to_string(), TEXT, f_mid_b, 0);
+    // longest win streak over the whole history of this queue (wins/losses are real even for estimates)
+    let x = g.text(climb_end, cy_, "      Longest win streak: ", MUTED, f_mid, 0);
+    g.text(x, cy_, &longest_win_streak(&all).to_string(), TEXT, f_mid_b, 0);
 
     // --- footer ---
     let fy = h - s(34.0);
