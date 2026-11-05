@@ -1,0 +1,66 @@
+1793901767 tracker started
+1793901768 recorded baseline RANKED_SOLO_5x5 +0 -> GOLD II 16
+1793901768 recorded baseline RANKED_FLEX_SR +0 -> GOLD IV 75
+1793901768 websocket connect failed
+1793901773 websocket connect failed
+1793901778 websocket connect failed
+1793901810 tracker started
+1793901810 websocket: unexpected status 404
+1793901855 tracker started
+1793901855 websocket: unexpected status 404
+1793901860 websocket: unexpected status 404
+1793901865 websocket: unexpected status 404
+1793901940 tracker started
+1793901940 websocket: unexpected status 404: HTTP/1.1 404 Not Found
+Content-Length: 80
+Content-Type: application/json
+Vary: origin
+access-control-allow-origin: https://127.0.0.1:53548
+
+
+1793901945 websocket: unexpected status 404: HTTP/1.1 404 Not Found
+Content-Length: 80
+Content-Type: application/json
+Vary: origin
+access-control-allow-origin: https://127.0.0.1:53548
+
+
+1793901950 websocket: unexpected status 404: HTTP/1.1 404 Not Found
+Content-Length: 80
+Content-Type: application/json
+Vary: origin
+access-control-allow-origin: https://127.0.0.1:53548
+
+
+1793901955 websocket: unexpected status 404: HTTP/1.1 404 Not Found
+Content-Length: 80
+Content-Type: application/json
+Vary: origin
+access-control-allow-origin: https://127.0.0.1:53548
+
+
+1793901960 websocket: unexpected status 404: HTTP/1.1 404 Not Found
+Content-Length: 80
+Content-Type: application/json
+Vary: origin
+access-control-allow-origin: https://127.0.0.1:53548
+
+
+1793901970 tracker started
+1793901970 connected to client
+1793902186 tracker started
+1793902186 connected to client
+1793902280 tracker started
+1793902280 connected to client
+1793902687 tracker started
+1793902687 connected to client
+1793902775 tracker started
+1793902775 connected to client
+1793902827 tracker started
+1793902827 connected to client
+1793904987 recorded exact RANKED_SOLO_5x5 -17 -> GOLD III 99
+1793908159 recorded exact RANKED_SOLO_5x5 +23 -> GOLD II 22
+1793910491 recorded exact RANKED_SOLO_5x5 +23 -> GOLD II 45
+1793912340 recorded exact RANKED_SOLO_5x5 +23 -> GOLD II 68
+1793914101 tracker started
+1793914101 connected to client

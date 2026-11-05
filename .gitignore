@@ -1,0 +1,7 @@
+# build output
+/target/
+
+# built programs (build with `cargo build --release`, then copy to bin/)
+/bin/*.exe
+
+# tracker data in bin/data/ IS committed on purpose
