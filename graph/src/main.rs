@@ -81,6 +81,8 @@ struct Cache {
     live: HashMap<String, Standing>,
     /// Start of the current ranked split (unix ms), from the client. 0 = unknown.
     split_start: i64,
+    /// Start of the current ranked season (its first split), unix ms. 0 = unknown.
+    season_start: i64,
 }
 
 fn cache_path() -> PathBuf {
@@ -111,6 +113,7 @@ fn load_cache() -> Cache {
         }
     }
     c.split_start = v["splitStart"].as_i64().unwrap_or(0);
+    c.season_start = v["seasonStart"].as_i64().unwrap_or(0);
     if let Some(m) = v["live"].as_object() {
         for (q, s) in m {
             c.live.insert(
@@ -143,7 +146,7 @@ fn save_cache(c: &Cache) {
             (q.clone(), json!({"tier": s.tier, "div": s.div, "lp": s.lp, "w": s.wins, "l": s.losses, "abs": s.abs}))
         })
         .collect();
-    let v = json!({"games": games, "champs": champs, "live": live, "splitStart": c.split_start});
+    let v = json!({"games": games, "champs": champs, "live": live, "splitStart": c.split_start, "seasonStart": c.season_start});
     let tmp = cache_path().with_extension("tmp");
     if std::fs::write(&tmp, v.to_string()).is_ok() {
         let _ = std::fs::rename(&tmp, cache_path());
@@ -213,7 +216,11 @@ fn backfill(hwnd: SendPtr) {
             }
         }
     }
-    if let Some(season) = lcu.get("/lol-seasons/v1/season/product/LOL") {
+    if let Some((split, season)) = lcu.season_dates() {
+        cache.split_start = split;
+        cache.season_start = season;
+    } else if let Some(season) = lcu.get("/lol-seasons/v1/season/product/LOL") {
+        // fallback: this only knows the current split
         if let Some(start) = season["seasonStart"].as_i64() {
             cache.split_start = start;
         }
@@ -244,7 +251,7 @@ struct App {
     tabs: [RECT; 2],
     refresh_btn: RECT,
     range: usize,
-    range_btns: [RECT; 4],
+    range_btns: [RECT; 5],
     tracker_btn: RECT,
     plot: RECT,
 }
@@ -262,7 +269,7 @@ thread_local! {
         tabs: [RECT { left: 0, top: 0, right: 0, bottom: 0 }; 2],
         refresh_btn: RECT { left: 0, top: 0, right: 0, bottom: 0 },
         range: 0, // Last 30
-        range_btns: [RECT { left: 0, top: 0, right: 0, bottom: 0 }; 4],
+        range_btns: [RECT { left: 0, top: 0, right: 0, bottom: 0 }; 5],
         tracker_btn: RECT { left: 0, top: 0, right: 0, bottom: 0 },
         plot: RECT { left: 0, top: 0, right: 0, bottom: 0 },
     });
@@ -623,10 +630,10 @@ fn draw(g: &Gfx, w: i32, h: i32, app: &mut App) {
     app.refresh_btn = rr;
 
     // range pills (second row, right-aligned): Last 30 / Last 90 / All
-    let pw_ = s(72.0);
+    let pw_ = s(68.0);
     let ph_ = s(22.0);
     let py = s(57.0);
-    let mut px_ = w - s(20.0) - 4 * pw_ - 3 * s(6.0);
+    let mut px_ = w - s(20.0) - 5 * pw_ - 4 * s(6.0);
     for (i, label) in RANGE_LABELS.iter().enumerate() {
         let r = rect(px_, py, px_ + pw_, py + ph_);
         let active = i == app.range;
@@ -769,7 +776,13 @@ fn draw(g: &Gfx, w: i32, h: i32, app: &mut App) {
         if k > 0 {
             let x = (xpx(k - 1) + xpx(k)) / 2;
             g.line(x, plot.top, x, plot.bottom, GRID_TIER, 1, true);
-            g.text(x + s(6.0), plot.top + s(2.0), "tracked from here", MUTED, f_small, 0);
+            // label right of the line, or left of it when it would run off the plot
+            let label = "tracked from here";
+            if x + s(6.0) + g.text_size(label, f_small).0 > plot.right {
+                g.text(x - s(6.0), plot.top + s(2.0), label, MUTED, f_small, 2);
+            } else {
+                g.text(x + s(6.0), plot.top + s(2.0), label, MUTED, f_small, 0);
+            }
         }
     }
 
@@ -909,7 +922,7 @@ fn invalidate(hwnd: HWND) {
     unsafe { InvalidateRect(hwnd, null(), 0) };
 }
 
-const RANGE_LABELS: [&str; 4] = ["Last 30", "Last 90", "This split", "All"];
+const RANGE_LABELS: [&str; 5] = ["Last 30", "Last 90", "This split", "This season", "All"];
 
 /// Index of the first game shown for the selected range.
 fn visible_offset(app: &App) -> usize {
@@ -919,6 +932,7 @@ fn visible_offset(app: &App) -> usize {
         1 => pts.len().saturating_sub(90),
         // games since the current split started (as reported by the client)
         2 => pts.iter().position(|p| p.t >= app.cache.split_start).unwrap_or(pts.len()),
+        3 => pts.iter().position(|p| p.t >= app.cache.season_start).unwrap_or(pts.len()),
         _ => 0,
     }
 }
@@ -1004,7 +1018,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
                         return 1;
                     }
                 }
-                for i in 0..4 {
+                for i in 0..5 {
                     if inside(&app.range_btns[i], x, y) {
                         app.range = i;
                         app.hover = None;

@@ -23,7 +23,7 @@ struct Req {
     _session: H,
 }
 
-fn open(port: u16, path: &str, timeout_ms: i32) -> Option<Req> {
+fn open(port: u16, verb: &str, path: &str, timeout_ms: i32) -> Option<Req> {
     unsafe {
         let session = H(WinHttpOpen(wide("lp-graph").as_ptr(), WINHTTP_ACCESS_TYPE_NO_PROXY, null(), null(), 0));
         if session.0.is_null() {
@@ -39,7 +39,7 @@ fn open(port: u16, path: &str, timeout_ms: i32) -> Option<Req> {
         }
         let req = H(WinHttpOpenRequest(
             conn.0,
-            wide("GET").as_ptr(),
+            wide(verb).as_ptr(),
             wide(path).as_ptr(),
             null(),
             null(),
@@ -59,10 +59,11 @@ fn open(port: u16, path: &str, timeout_ms: i32) -> Option<Req> {
     }
 }
 
-fn send(r: &Req, auth_header: &str) -> Option<u32> {
+fn send(r: &Req, headers: &str, body: &[u8]) -> Option<u32> {
     unsafe {
-        let hdr = wide(auth_header);
-        if WinHttpSendRequest(r.req.0, hdr.as_ptr(), u32::MAX, null(), 0, 0, 0) == 0 {
+        let hdr = wide(headers);
+        let (ptr, len) = if body.is_empty() { (null(), 0) } else { (body.as_ptr() as *const c_void, body.len() as u32) };
+        if WinHttpSendRequest(r.req.0, hdr.as_ptr(), u32::MAX, ptr, len, len, 0) == 0 {
             return None;
         }
         if WinHttpReceiveResponse(r.req.0, null_mut()) == 0 {
@@ -84,11 +85,21 @@ fn send(r: &Req, auth_header: &str) -> Option<u32> {
 
 /// HTTPS GET to 127.0.0.1:port. Returns the body for 2xx responses.
 pub fn get(port: u16, path: &str, auth_header: &str) -> Option<Vec<u8>> {
-    let r = open(port, path, 15_000)?;
+    request(port, "GET", path, auth_header, &[])
+}
+
+/// HTTPS POST with a JSON body to 127.0.0.1:port. Returns the body for 2xx responses.
+pub fn post_json(port: u16, path: &str, auth_header: &str, json: &str) -> Option<Vec<u8>> {
+    let headers = format!("{auth_header}\r\nContent-Type: application/json");
+    request(port, "POST", path, &headers, json.as_bytes())
+}
+
+fn request(port: u16, verb: &str, path: &str, headers: &str, body: &[u8]) -> Option<Vec<u8>> {
+    let r = open(port, verb, path, 15_000)?;
     // No keep-alive: the client refuses WebSocket upgrades on a reused connection.
     let off: u32 = WINHTTP_DISABLE_KEEP_ALIVE;
     unsafe { WinHttpSetOption(r.req.0, WINHTTP_OPTION_DISABLE_FEATURE, &off as *const u32 as *const c_void, 4) };
-    let code = send(&r, auth_header)?;
+    let code = send(&r, headers, body)?;
     if !(200..300).contains(&code) {
         return None;
     }
@@ -118,13 +129,13 @@ impl WebSocket {
     pub fn connect(port: u16, auth_header: &str) -> Result<WebSocket, String> {
         // 0 = no receive timeout: the tracker thread blocks until the client sends something.
         let err = |what: &str| format!("{what} failed (error {})", unsafe { GetLastError() });
-        let r = open(port, "/", 0).ok_or_else(|| err("open"))?;
+        let r = open(port, "GET", "/", 0).ok_or_else(|| err("open"))?;
         unsafe {
             if WinHttpSetOption(r.req.0, WINHTTP_OPTION_UPGRADE_TO_WEB_SOCKET, null(), 0) == 0 {
                 return Err(err("upgrade option"));
             }
         }
-        let code = send(&r, auth_header).ok_or_else(|| err("send"))?;
+        let code = send(&r, auth_header, &[]).ok_or_else(|| err("send"))?;
         if code != 101 {
             let mut buf = vec![0u16; 8192];
             let mut size = (buf.len() * 2) as u32;
