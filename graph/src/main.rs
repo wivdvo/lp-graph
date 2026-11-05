@@ -37,7 +37,9 @@ const GRID_TIER: u32 = rgb(0x3b, 0x41, 0x4d);
 const TEXT: u32 = rgb(0xe6, 0xe6, 0xe6);
 const MUTED: u32 = rgb(0x8b, 0x92, 0x9e);
 const LINE: u32 = rgb(0x5b, 0x9b, 0xd5);
-const LINE_EST: u32 = rgb(0x34, 0x4c, 0x66);
+/// graph line: white for tracked games, dim gray for the estimated part
+const GRAPH_LINE: u32 = rgb(0xf2, 0xf2, 0xf2);
+const GRAPH_LINE_EST: u32 = rgb(0x5a, 0x5f, 0x69);
 const WIN: u32 = rgb(0x3f, 0xb9, 0x50);
 const LOSS: u32 = rgb(0xf8, 0x51, 0x49);
 const EST: u32 = rgb(0x6e, 0x75, 0x80);
@@ -888,7 +890,7 @@ fn draw(g: &Gfx, w: i32, h: i32, app: &mut App) {
         let pt = POINT { x: xpx(i), y: ypx(p.abs) };
         if p.new_split > 0 && i > 0 {
             // LP reset at a split start: end the line here, draw a divider, start a new line
-            g.polyline(&seg, if seg_est { LINE_EST } else { LINE }, lw);
+            g.polyline(&seg, if seg_est { GRAPH_LINE_EST } else { GRAPH_LINE }, lw);
             let x = (xpx(i - 1) + xpx(i)) / 2;
             g.line(x, plot.top, x, plot.bottom, GRID_TIER, 1, true);
             g.text(x + s(6.0), plot.bottom - s(18.0), &format!("Split {}", p.new_split), MUTED, f_small, 0);
@@ -898,14 +900,14 @@ fn draw(g: &Gfx, w: i32, h: i32, app: &mut App) {
         }
         if is_est != seg_est {
             seg.push(pt);
-            g.polyline(&seg, if seg_est { LINE_EST } else { LINE }, lw);
+            g.polyline(&seg, if seg_est { GRAPH_LINE_EST } else { GRAPH_LINE }, lw);
             seg = vec![pt];
             seg_est = is_est;
         } else {
             seg.push(pt);
         }
     }
-    g.polyline(&seg, if seg_est { LINE_EST } else { LINE }, lw);
+    g.polyline(&seg, if seg_est { GRAPH_LINE_EST } else { GRAPH_LINE }, lw);
 
     // markers
     let r = if n > 150 { s(2.5) } else if n > 80 { s(3.0) } else { s(4.0) }.max(2);
