@@ -77,6 +77,9 @@ fn notify(hwnd: HWND, msg: u32) {
 }
 
 fn open_graph() {
+    if common::focus_graph_window() {
+        return; // already open: bring it to the front instead of opening another
+    }
     if let Ok(exe) = std::env::current_exe() {
         let _ = std::process::Command::new(exe.with_file_name("lp-graph.exe")).spawn();
     }

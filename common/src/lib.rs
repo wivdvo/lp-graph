@@ -195,6 +195,24 @@ pub fn base64(data: &[u8]) -> String {
     out
 }
 
+pub const GRAPH_WINDOW_CLASS: &str = "LpGraphWindow";
+
+/// Brings an already open graph window to the front. Returns false if none is open.
+pub fn focus_graph_window() -> bool {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{FindWindowW, IsIconic, SetForegroundWindow, ShowWindow, SW_RESTORE};
+    unsafe {
+        let hwnd = FindWindowW(wide(GRAPH_WINDOW_CLASS).as_ptr(), std::ptr::null());
+        if hwnd.is_null() {
+            return false;
+        }
+        if IsIconic(hwnd) != 0 {
+            ShowWindow(hwnd, SW_RESTORE);
+        }
+        SetForegroundWindow(hwnd);
+        true
+    }
+}
+
 /// Opaque handle wrapper so raw pointers can be passed to threads.
 #[derive(Clone, Copy)]
 pub struct SendPtr(pub *mut c_void);

@@ -1095,6 +1095,10 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
 }
 
 fn main() {
+    // only one graph window: if one is already open, bring it to the front and quit
+    if common::focus_graph_window() {
+        return;
+    }
     unsafe {
         SetProcessDPIAware();
         let screen = GetDC(null_mut());
@@ -1109,7 +1113,7 @@ fn main() {
         });
 
         let hinst = GetModuleHandleW(null());
-        let class = wide("LpGraphWindow");
+        let class = wide(common::GRAPH_WINDOW_CLASS);
         let wc = WNDCLASSW {
             style: CS_HREDRAW | CS_VREDRAW,
             lpfnWndProc: Some(wndproc),
