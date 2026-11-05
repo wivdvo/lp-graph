@@ -56,38 +56,58 @@ fn git(root: &Path, args: &[&str]) -> Result<String, String> {
     }
 }
 
+/// Writes bin/data/sync-status.json for the graph's footer indicator (not committed).
+/// state: "ok" (GitHub has everything), "failed" (unpushed commits), "off", "norepo".
+pub fn write_status(state: &str, pending: u32, detail: &str) {
+    let v = serde_json::json!({ "state": state, "t": common::now_ms(), "pending": pending, "detail": detail });
+    let _ = std::fs::write(store::data_dir().join("sync-status.json"), v.to_string());
+}
+
 /// Commits bin/data with `message` (if anything changed) and pushes. Runs in the background.
 /// With `message` = None it only pushes commits that haven't been pushed yet.
 pub fn push_async(message: Option<String>, log: fn(&str)) {
     if !enabled() {
+        write_status("off", 0, "");
         return;
     }
     std::thread::spawn(move || {
         let _guard = BUSY.lock();
-        let Some(root) = repo_root() else { return };
+        let Some(root) = repo_root() else {
+            write_status("norepo", 0, "");
+            return;
+        };
+        let fail = |what: &str, e: &str| {
+            log(&format!("sync: {what} failed: {e}"));
+            write_status("failed", 0, e.lines().next().unwrap_or(""));
+        };
         if let Some(msg) = message {
             let data = store::data_dir();
             let rel = data.strip_prefix(&root).unwrap_or(&data).to_string_lossy().replace('\\', "/");
             if let Err(e) = git(&root, &["add", "--", &rel]) {
-                log(&format!("sync: git add failed: {e}"));
-                return;
+                return fail("git add", &e);
             }
             // exit code 1 = there are staged changes
             if git(&root, &["diff", "--cached", "--quiet"]).is_err() {
                 if let Err(e) = git(&root, &["commit", "-q", "-m", &msg]) {
-                    log(&format!("sync: commit failed: {e}"));
-                    return;
+                    return fail("commit", &e);
                 }
             }
         }
         // only push when there are local commits that aren't on GitHub yet
         let ahead = git(&root, &["rev-list", "--count", "@{u}..HEAD"]).ok().and_then(|s| s.trim().parse::<u32>().ok()).unwrap_or(1);
         if ahead == 0 {
+            write_status("ok", 0, "");
             return;
         }
         match git(&root, &["push", "-q"]) {
-            Ok(_) => log(&format!("sync: pushed {ahead} commit(s) to GitHub")),
-            Err(e) => log(&format!("sync: push failed (will retry after the next game): {e}")),
+            Ok(_) => {
+                log(&format!("sync: pushed {ahead} commit(s) to GitHub"));
+                write_status("ok", 0, "");
+            }
+            Err(e) => {
+                log(&format!("sync: push failed (will retry after the next game): {e}"));
+                write_status("failed", ahead, e.lines().next().unwrap_or(""));
+            }
         }
     });
 }

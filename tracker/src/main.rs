@@ -82,6 +82,12 @@ fn toggle_autostart(on: bool) {
     }
 }
 
+/// Tray toggle: switch sync on/off and refresh the footer status right away.
+fn toggle_sync(on: bool) {
+    sync::set_enabled(on);
+    sync::push_async(None, log);
+}
+
 fn main() {
     if std::env::args().any(|a| a == "--uninstall") {
         toggle_autostart(false);
@@ -112,7 +118,7 @@ fn main() {
         }
         sleep(Duration::from_secs(5));
     });
-    tray::run(tray::Hooks { autostart_on, set_autostart: toggle_autostart, sync_on: sync::enabled, set_sync: sync::set_enabled });
+    tray::run(tray::Hooks { autostart_on, set_autostart: toggle_autostart, sync_on: sync::enabled, set_sync: toggle_sync });
 }
 
 /// One connection to a running client. Returns when the client goes away.

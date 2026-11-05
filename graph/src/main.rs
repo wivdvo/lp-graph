@@ -238,6 +238,7 @@ struct App {
     series: [Vec<Pt>; 2],
     hover: Option<usize>,
     tracker_running: bool,
+    sync: Option<(String, i64, i64)>,
     scale: f32,
     // hit areas (client px)
     tabs: [RECT; 2],
@@ -256,6 +257,7 @@ thread_local! {
         series: [Vec::new(), Vec::new()],
         hover: None,
         tracker_running: false,
+        sync: None,
         scale: 1.0,
         tabs: [RECT { left: 0, top: 0, right: 0, bottom: 0 }; 2],
         refresh_btn: RECT { left: 0, top: 0, right: 0, bottom: 0 },
@@ -327,9 +329,41 @@ fn current_standing(app: &App, queue: &str) -> Option<Standing> {
     }
 }
 
+/// Contents of bin/data/sync-status.json: (state, time ms, unpushed commits).
+fn load_sync_status() -> Option<(String, i64, i64)> {
+    let s = std::fs::read_to_string(store::data_dir().join("sync-status.json")).ok()?;
+    let v: Value = serde_json::from_str(&s).ok()?;
+    Some((v["state"].as_str()?.to_string(), v["t"].as_i64().unwrap_or(0), v["pending"].as_i64().unwrap_or(0)))
+}
+
+fn ago(t_ms: i64) -> String {
+    let m = (now_ms() - t_ms).max(0) / 60_000;
+    match m {
+        0 => "just now".into(),
+        1..=59 => format!("{m} min ago"),
+        60..=1439 => format!("{} h ago", m / 60),
+        _ => format!("{} days ago", m / 1440),
+    }
+}
+
+/// Dot color and text for the footer's GitHub backup indicator.
+fn backup_status(s: &Option<(String, i64, i64)>) -> (u32, String) {
+    match s {
+        Some((st, t, _)) if st == "ok" => (WIN, format!("Backed up to GitHub · {}", ago(*t))),
+        Some((st, _, n)) if st == "failed" => {
+            let pending = if *n > 0 { format!(" · {n} not pushed") } else { String::new() };
+            (LOSS, format!("GitHub backup failed{pending} · retries after next game"))
+        }
+        Some((st, _, _)) if st == "off" => (EST, "GitHub backup off".into()),
+        Some((st, _, _)) if st == "norepo" => (EST, "No git repo – backup off".into()),
+        _ => (EST, "GitHub backup: waiting for tracker".into()),
+    }
+}
+
 fn reload(app: &mut App) {
     app.records = store::load_records();
     app.cache = load_cache();
+    app.sync = load_sync_status();
     for (i, (q, qid, _)) in QUEUES.iter().enumerate() {
         app.series[i] = build_series(&app.records, &app.cache, q, *qid);
     }
@@ -620,13 +654,19 @@ fn draw(g: &Gfx, w: i32, h: i32, app: &mut App) {
     // --- footer ---
     let fy = h - s(34.0);
     let (tc, tt) = if app.tracker_running {
-        (WIN, "Tracker running – games are recorded automatically")
+        (WIN, "Tracker running")
     } else {
         (LOSS, "Tracker not running – click to start")
     };
     g.circle(s(32.0), fy + s(8.0), s(4.0), Some(tc), tc, 1);
     let end = g.text(s(42.0), fy, tt, MUTED, f_small, 0);
     app.tracker_btn = rect(s(24.0), fy - s(4.0), end + s(4.0), fy + s(20.0));
+
+    // GitHub backup status (written by the tracker after each sync)
+    let (bc, bt) = backup_status(&app.sync);
+    let bx = end + s(22.0);
+    g.circle(bx, fy + s(8.0), s(4.0), Some(bc), bc, 1);
+    g.text(bx + s(10.0), fy, &bt, MUTED, f_small, 0);
     let status = STATUS.lock().unwrap().clone();
     // legend (right)
     let mut lx = w - s(28.0);
@@ -1007,7 +1047,8 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
                 app.tracker_running = r;
                 c
             });
-            if changed {
+            // timer 2 (once a minute) keeps "backed up … ago" current
+            if changed || wp == 2 {
                 invalidate(hwnd);
             }
             0
@@ -1078,6 +1119,7 @@ fn main() {
         SendMessageW(hwnd, WM_SETICON, ICON_SMALL as usize, small as isize);
         ShowWindow(hwnd, SW_SHOW);
         SetTimer(hwnd, 1, 3000, None);
+        SetTimer(hwnd, 2, 60_000, None);
         watch_files(hwnd);
         start_backfill(hwnd);
 
