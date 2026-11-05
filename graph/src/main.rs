@@ -741,8 +741,10 @@ fn draw(g: &Gfx, w: i32, h: i32, app: &mut App) {
     // countdown until the current split ends
     if let Some(sp) = common::split_at(&app.cache.splits, now_ms()).filter(|sp| sp.end > now_ms()) {
         let days = (sp.end - now_ms() + 86_399_999) / 86_400_000;
-        let when = if days <= 1 { "ends today".to_string() } else { format!("ends in {days} days") };
+        // "ends in" styled like "Split 3", only the day count stands out
+        let (lead, when) = if days <= 1 { ("ends ", "today".to_string()) } else { ("ends in ", format!("{days} days")) };
         let x = g.text(x, cy_, &format!("      Split {} ", sp.number), MUTED, f_mid, 0);
+        let x = g.text(x, cy_, lead, MUTED, f_mid, 0);
         g.text(x, cy_, &when, TEXT, f_mid_b, 0);
     }
 
