@@ -122,6 +122,13 @@ fn main() {
         }
         sleep(Duration::from_secs(5));
     });
+    if std::env::args().any(|a| a == "--test-notification") {
+        // shows a sample post-game notification once the tray icon exists
+        std::thread::spawn(|| {
+            sleep(Duration::from_millis(1500));
+            tray::show_notification("Win · +23 LP", "Solo/Duo → Gold II 92 LP (test notification)");
+        });
+    }
     tray::run(tray::Hooks { autostart_on, set_autostart: toggle_autostart, sync_on: sync::enabled, set_sync: toggle_sync });
 }
 
@@ -224,12 +231,30 @@ fn check(lcu: &Lcu, records: &mut Vec<Record>, stats: Option<Value>) -> bool {
     if let Some(r) = new.iter().rev().find(|r| r.is_game()) {
         tray::set_last(&format!("Last game: {:+} LP → {}", r.delta, common::rank::label(&r.tier, &r.div, r.lp)));
     }
+    if let Some((title, text)) = notification_text(&new) {
+        tray::show_notification(&title, &text);
+    }
     if let Err(e) = store::append_records(&new) {
         log(&format!("write failed: {e}"));
     }
     sync::push_async(Some(commit_message(&new)), log);
     records.extend(new);
     true
+}
+
+/// Post-game notification: ("Win · +23 LP", "Solo/Duo → Gold II 92 LP"). None for snapshots.
+fn notification_text(new: &[Record]) -> Option<(String, String)> {
+    let last = new.last()?;
+    let queue = QUEUES.iter().find(|q| q.0 == last.queue).map(|q| q.2).unwrap_or("Ranked");
+    let rank = common::rank::label(&last.tier, &last.div, last.lp);
+    let games: Vec<&Record> = new.iter().filter(|r| r.is_game()).collect();
+    let title = match games.len() {
+        0 if last.kind == Kind::Dodge => format!("Dodge · {:+} LP", last.delta),
+        0 => return None,
+        1 => format!("{} · {:+} LP", if games[0].win { "Win" } else { "Loss" }, games[0].delta),
+        n => format!("{n} games while the tracker was off · {:+} LP", games.iter().map(|r| r.delta).sum::<i64>()),
+    };
+    Some((title, format!("{queue} → {rank}")))
 }
 
 /// e.g. "Solo/Duo: +23 LP (Win) → Gold II 68 LP"

@@ -50,6 +50,58 @@ pub fn set_last(s: &str) {
     refresh();
 }
 
+/// Pending post-game notification (title, text), shown by the tray thread.
+static TOAST: Mutex<Option<(String, String)>> = Mutex::new(None);
+const WM_TOAST: u32 = WM_APP + 3;
+const ID_NOTIFY: usize = 5;
+
+fn notify_marker() -> std::path::PathBuf {
+    common::store::data_dir().join("no-notify")
+}
+
+pub fn notifications_on() -> bool {
+    !notify_marker().exists()
+}
+
+fn set_notifications(on: bool) {
+    if on {
+        let _ = std::fs::remove_file(notify_marker());
+    } else {
+        let _ = std::fs::write(notify_marker(), b"");
+    }
+}
+
+/// Shows a Windows notification from the tray icon, e.g. "Win · +23 LP" / "Solo/Duo → Gold II 92 LP".
+pub fn show_notification(title: &str, text: &str) {
+    if !notifications_on() {
+        return;
+    }
+    *TOAST.lock().unwrap() = Some((title.to_string(), text.to_string()));
+    let h = HWND_TRAY.load(Ordering::Relaxed);
+    if h != 0 {
+        unsafe { PostMessageW(h as HWND, WM_TOAST, 0, 0) };
+    }
+}
+
+fn show_toast(hwnd: HWND) {
+    let Some((title, text)) = TOAST.lock().unwrap().take() else { return };
+    unsafe {
+        let mut nid: NOTIFYICONDATAW = std::mem::zeroed();
+        nid.cbSize = std::mem::size_of::<NOTIFYICONDATAW>() as u32;
+        nid.hWnd = hwnd;
+        nid.uID = 1;
+        nid.uFlags = NIF_INFO;
+        nid.dwInfoFlags = NIIF_NONE;
+        let t: Vec<u16> = title.encode_utf16().collect();
+        let n = t.len().min(nid.szInfoTitle.len() - 1);
+        nid.szInfoTitle[..n].copy_from_slice(&t[..n]);
+        let b: Vec<u16> = text.encode_utf16().collect();
+        let n = b.len().min(nid.szInfo.len() - 1);
+        nid.szInfo[..n].copy_from_slice(&b[..n]);
+        Shell_NotifyIconW(NIM_MODIFY, &nid);
+    }
+}
+
 fn tooltip() -> String {
     let mut t = format!("LP Tracker – {}", STATUS.lock().unwrap());
     let last = LAST.lock().unwrap();
@@ -101,6 +153,8 @@ fn show_menu(hwnd: HWND) {
         AppendMenuW(m, flags, ID_AUTOSTART, wide("Start with Windows").as_ptr());
         let flags = if (hooks.sync_on)() { MF_STRING | MF_CHECKED } else { MF_STRING };
         AppendMenuW(m, flags, ID_SYNC, wide("Sync to GitHub after each game").as_ptr());
+        let flags = if notifications_on() { MF_STRING | MF_CHECKED } else { MF_STRING };
+        AppendMenuW(m, flags, ID_NOTIFY, wide("Notify after each game").as_ptr());
         AppendMenuW(m, MF_SEPARATOR, 0, null());
         AppendMenuW(m, MF_STRING, ID_EXIT, wide("Exit tracker").as_ptr());
         SetMenuDefaultItem(m, ID_OPEN as u32, 0);
@@ -114,6 +168,7 @@ fn show_menu(hwnd: HWND) {
             ID_OPEN => open_graph(),
             ID_AUTOSTART => (hooks.set_autostart)(!(hooks.autostart_on)()),
             ID_SYNC => (hooks.set_sync)(!(hooks.sync_on)()),
+            ID_NOTIFY => set_notifications(!notifications_on()),
             ID_EXIT => {
                 notify(hwnd, NIM_DELETE);
                 std::process::exit(0);
@@ -135,6 +190,10 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
         }
         WM_REFRESH => {
             notify(hwnd, NIM_MODIFY);
+            0
+        }
+        WM_TOAST => {
+            show_toast(hwnd);
             0
         }
         WM_DESTROY => {

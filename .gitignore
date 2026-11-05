@@ -13,3 +13,4 @@
 /bin/data/no-autostart
 /bin/data/sync-status.json
 /bin/data/history_cache.json
+/bin/data/no-notify
