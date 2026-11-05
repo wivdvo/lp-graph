@@ -249,6 +249,8 @@ fn snapshot(queue: &str, s: &Standing, kind: Kind, delta: i64, game_id: i64, win
         champ,
         win,
         kind,
+        start: 0,
+        duration: 0,
     }
 }
 
@@ -299,6 +301,8 @@ fn game_records(lcu: &Lcu, records: &[Record], queue: &str, qid: i64, last: &Rec
         let mut r = snapshot(queue, &st, kind, deltas[i], g.map(|g| g.id).unwrap_or(0), wins[i], g.map(|g| g.champ).unwrap_or(0));
         if let Some(g) = g {
             r.t = r.t.min(g.t + g.duration * 1000).max(last.t);
+            r.start = g.t;
+            r.duration = g.duration;
         }
         out.push(r);
     }

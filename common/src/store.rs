@@ -67,6 +67,10 @@ pub struct Record {
     pub champ: i64,
     pub win: bool,
     pub kind: Kind,
+    /// When the game started (unix ms), from match history. 0 = unknown (baselines).
+    pub start: i64,
+    /// Game length in seconds, from match history. 0 = unknown.
+    pub duration: i64,
 }
 
 impl Record {
@@ -75,6 +79,7 @@ impl Record {
             "t": self.t, "queue": self.queue, "tier": self.tier, "div": self.div, "lp": self.lp,
             "w": self.wins, "l": self.losses, "abs": self.abs, "delta": self.delta,
             "gameId": self.game_id, "champ": self.champ, "win": self.win, "kind": self.kind.as_str(),
+            "queueId": crate::rank::queue_id(&self.queue), "start": self.start, "dur": self.duration,
         })
         .to_string()
     }
@@ -95,6 +100,8 @@ impl Record {
             champ: v["champ"].as_i64().unwrap_or(0),
             win: v["win"].as_bool().unwrap_or(false),
             kind: Kind::parse(v["kind"].as_str().unwrap_or("")),
+            start: v["start"].as_i64().unwrap_or(0),
+            duration: v["dur"].as_i64().unwrap_or(0),
         })
     }
 

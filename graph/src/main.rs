@@ -297,7 +297,12 @@ fn build_series(records: &[Record], cache: &Cache, queue: &str, qid: i64) -> Vec
     est.reverse();
     let mut pts = est;
     for r in recs.iter().filter(|r| r.is_game()) {
-        let t = cache.games.iter().find(|g| g.id == r.game_id && r.game_id != 0).map(|g| g.t).unwrap_or(r.t);
+        // start time stored in the record; older records fall back to the cache, then to the record time
+        let t = if r.start > 0 {
+            r.start
+        } else {
+            cache.games.iter().find(|g| g.id == r.game_id && r.game_id != 0).map(|g| g.t).unwrap_or(r.t)
+        };
         pts.push(Pt {
             abs: r.abs,
             delta: r.delta,

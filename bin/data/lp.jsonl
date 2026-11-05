@@ -1,7 +1,7 @@
-{"abs":1416,"champ":0,"delta":0,"div":"II","gameId":0,"kind":"baseline","l":37,"lp":16,"queue":"RANKED_SOLO_5x5","t":1793901768019,"tier":"GOLD","w":31,"win":false}
-{"abs":1275,"champ":0,"delta":0,"div":"IV","gameId":0,"kind":"baseline","l":64,"lp":75,"queue":"RANKED_FLEX_SR","t":1793901768019,"tier":"GOLD","w":70,"win":false}
-{"abs":1399,"champ":84,"delta":-17,"div":"III","gameId":8036907756,"kind":"exact","l":38,"lp":99,"queue":"RANKED_SOLO_5x5","t":1793904954560,"tier":"GOLD","w":31,"win":false}
-{"abs":1422,"champ":84,"delta":23,"div":"II","gameId":8036977238,"kind":"exact","l":38,"lp":22,"queue":"RANKED_SOLO_5x5","t":1793908112976,"tier":"GOLD","w":32,"win":true}
-{"abs":1445,"champ":84,"delta":23,"div":"II","gameId":8037037466,"kind":"exact","l":38,"lp":45,"queue":"RANKED_SOLO_5x5","t":1793910360283,"tier":"GOLD","w":33,"win":true}
-{"abs":1468,"champ":84,"delta":23,"div":"II","gameId":8037084007,"kind":"exact","l":38,"lp":68,"queue":"RANKED_SOLO_5x5","t":1793912308967,"tier":"GOLD","w":34,"win":true}
-{"abs":1492,"champ":84,"delta":24,"div":"II","gameId":8037187000,"kind":"exact","l":38,"lp":92,"queue":"RANKED_SOLO_5x5","t":1793916486582,"tier":"GOLD","w":35,"win":true}
+{"abs":1416,"champ":0,"delta":0,"div":"II","dur":0,"gameId":0,"kind":"baseline","l":37,"lp":16,"queue":"RANKED_SOLO_5x5","queueId":420,"start":0,"t":1793901768019,"tier":"GOLD","w":31,"win":false}
+{"abs":1275,"champ":0,"delta":0,"div":"IV","dur":0,"gameId":0,"kind":"baseline","l":64,"lp":75,"queue":"RANKED_FLEX_SR","queueId":440,"start":0,"t":1793901768019,"tier":"GOLD","w":70,"win":false}
+{"abs":1399,"champ":84,"delta":-17,"div":"III","dur":2068,"gameId":8036907756,"kind":"exact","l":38,"lp":99,"queue":"RANKED_SOLO_5x5","queueId":420,"start":1793902886560,"t":1793904954560,"tier":"GOLD","w":31,"win":false}
+{"abs":1422,"champ":84,"delta":23,"div":"II","dur":1613,"gameId":8036977238,"kind":"exact","l":38,"lp":22,"queue":"RANKED_SOLO_5x5","queueId":420,"start":1793906499976,"t":1793908112976,"tier":"GOLD","w":32,"win":true}
+{"abs":1445,"champ":84,"delta":23,"div":"II","dur":1916,"gameId":8037037466,"kind":"exact","l":38,"lp":45,"queue":"RANKED_SOLO_5x5","queueId":420,"start":1793908444283,"t":1793910360283,"tier":"GOLD","w":33,"win":true}
+{"abs":1468,"champ":84,"delta":23,"div":"II","dur":1596,"gameId":8037084007,"kind":"exact","l":38,"lp":68,"queue":"RANKED_SOLO_5x5","queueId":420,"start":1793910712967,"t":1793912308967,"tier":"GOLD","w":34,"win":true}
+{"abs":1492,"champ":84,"delta":24,"div":"II","dur":1723,"gameId":8037187000,"kind":"exact","l":38,"lp":92,"queue":"RANKED_SOLO_5x5","queueId":420,"start":1793914763582,"t":1793916486582,"tier":"GOLD","w":35,"win":true}
