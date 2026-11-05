@@ -638,7 +638,7 @@ fn draw(g: &Gfx, w: i32, h: i32, app: &mut App) {
 
     // climb rate (third row): last 3 exact wins vs last 3 exact losses
     let cy_ = s(90.0);
-    match climb_rate(&all) {
+    let climb_end = match climb_rate(&all) {
         Some((win_avg, nw, loss_avg, nl)) => {
             let diff = win_avg - loss_avg;
             let mut x = g.text(s(23.0), cy_, &format!("Climb rate (last {nw}W / {nl}L, exact):  "), MUTED, f_mid, 0);
@@ -649,12 +649,13 @@ fn draw(g: &Gfx, w: i32, h: i32, app: &mut App) {
             let dc = TEXT;
             x = g.text(x, cy_, &format!("{diff:+.1} LP"), dc, f_mid_b, 0);
             x = g.text(x, cy_, "  →  at 50% WR ", MUTED, f_mid, 0);
-            g.text(x, cy_, &format!("{:+.1} LP/game", diff / 2.0), dc, f_mid_b, 0);
+            g.text(x, cy_, &format!("{:+.1} LP/game", diff / 2.0), dc, f_mid_b, 0)
         }
-        None => {
-            g.text(s(23.0), cy_, "Climb rate: needs at least one exact win and one exact loss recorded by the tracker", MUTED, f_mid, 0);
-        }
-    }
+        None => g.text(s(23.0), cy_, "Climb rate: needs one exact win and one exact loss", MUTED, f_mid, 0),
+    };
+    // longest win streak over the games in the selected range (wins/losses are real even for estimates)
+    let x = g.text(climb_end, cy_, &format!("      Longest win streak ({}): ", RANGE_LABELS[app.range]), MUTED, f_mid, 0);
+    g.text(x, cy_, &longest_win_streak(&pts).to_string(), TEXT, f_mid_b, 0);
 
     // --- footer ---
     let fy = h - s(34.0);
@@ -1145,4 +1146,14 @@ fn day_number(t: &SYSTEMTIME) -> i64 {
     let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d - 1;
     let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
     era * 146_097 + doe - 719_468
+}
+
+/// Most wins in a row among these games.
+fn longest_win_streak(pts: &[Pt]) -> usize {
+    let (mut best, mut cur) = (0, 0);
+    for p in pts {
+        cur = if p.win { cur + 1 } else { 0 };
+        best = best.max(cur);
+    }
+    best
 }
