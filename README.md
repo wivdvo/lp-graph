@@ -17,10 +17,11 @@ Your Riot match history doesn't include LP, so games played before the tracker r
 
 ## Build
 
-```bash
-cargo build --release
-cp target/release/lp-tracker.exe target/release/lp-graph.exe bin/
+```powershell
+.\build.ps1
 ```
+
+This runs `cargo build --release`, then `tools/stamp` writes the icon and the names "LP Tracker" / "LP Graph" into the two `.exe` files (using Windows' own resource API, so no resource compiler is needed), and copies them into `bin/`. Or download both programs from the [latest release](https://github.com/wivdvo/lp-graph/releases/latest) and put them in a folder together.
 
 Then run `bin/lp-tracker.exe` once. It adds itself to Windows startup (turn this off in the tray menu, or run `lp-tracker.exe --uninstall`).
 

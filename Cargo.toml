@@ -1,6 +1,9 @@
 [workspace]
 resolver = "2"
-members = ["common", "tracker", "graph"]
+members = ["common", "tracker", "graph", "tools/stamp"]
+
+[workspace.package]
+version = "1.0.0"
 
 [workspace.dependencies]
 serde_json = "1"
