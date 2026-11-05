@@ -15,6 +15,7 @@ const WM_REFRESH: u32 = WM_APP + 2;
 const ID_OPEN: usize = 1;
 const ID_AUTOSTART: usize = 2;
 const ID_EXIT: usize = 3;
+const ID_SYNC: usize = 4;
 
 static STATUS: Mutex<String> = Mutex::new(String::new());
 static LAST: Mutex<String> = Mutex::new(String::new());
@@ -25,6 +26,8 @@ static ICON: AtomicIsize = AtomicIsize::new(0);
 pub struct Hooks {
     pub autostart_on: fn() -> bool,
     pub set_autostart: fn(bool),
+    pub sync_on: fn() -> bool,
+    pub set_sync: fn(bool),
 }
 static mut HOOKS: Option<Hooks> = None;
 
@@ -93,6 +96,8 @@ fn show_menu(hwnd: HWND) {
         AppendMenuW(m, MF_STRING, ID_OPEN, wide("Open LP Graph").as_ptr());
         let flags = if (hooks.autostart_on)() { MF_STRING | MF_CHECKED } else { MF_STRING };
         AppendMenuW(m, flags, ID_AUTOSTART, wide("Start with Windows").as_ptr());
+        let flags = if (hooks.sync_on)() { MF_STRING | MF_CHECKED } else { MF_STRING };
+        AppendMenuW(m, flags, ID_SYNC, wide("Sync to GitHub after each game").as_ptr());
         AppendMenuW(m, MF_SEPARATOR, 0, null());
         AppendMenuW(m, MF_STRING, ID_EXIT, wide("Exit tracker").as_ptr());
         SetMenuDefaultItem(m, ID_OPEN as u32, 0);
@@ -105,6 +110,7 @@ fn show_menu(hwnd: HWND) {
         match cmd as usize {
             ID_OPEN => open_graph(),
             ID_AUTOSTART => (hooks.set_autostart)(!(hooks.autostart_on)()),
+            ID_SYNC => (hooks.set_sync)(!(hooks.sync_on)()),
             ID_EXIT => {
                 notify(hwnd, NIM_DELETE);
                 std::process::exit(0);

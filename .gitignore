@@ -5,3 +5,9 @@
 /bin/*.exe
 
 # tracker data in bin/data/ IS committed on purpose
+
+# but not the tracker's log or its local on/off switches
+/bin/data/tracker.log
+/bin/data/tracker.log.old
+/bin/data/no-sync
+/bin/data/no-autostart

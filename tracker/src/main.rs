@@ -15,6 +15,7 @@ use windows_sys::Win32::System::Registry::{
     RegDeleteKeyValueW, RegGetValueW, RegSetKeyValueW, HKEY_CURRENT_USER, REG_SZ, RRF_RT_REG_SZ,
 };
 
+mod sync;
 mod tray;
 use windows_sys::Win32::System::Threading::CreateMutexW;
 
@@ -95,6 +96,7 @@ fn main() {
         set_autostart(true); // also keeps the path current if the exe was moved
     }
     log("tracker started");
+    sync::push_async(None, log); // push anything left over from last time
     if let Some(r) = store::load_records().last() {
         tray::set_last(&format!("Last: {}", common::rank::label(&r.tier, &r.div, r.lp)));
     }
@@ -110,7 +112,7 @@ fn main() {
         }
         sleep(Duration::from_secs(5));
     });
-    tray::run(tray::Hooks { autostart_on, set_autostart: toggle_autostart });
+    tray::run(tray::Hooks { autostart_on, set_autostart: toggle_autostart, sync_on: sync::enabled, set_sync: sync::set_enabled });
 }
 
 /// One connection to a running client. Returns when the client goes away.
@@ -208,8 +210,22 @@ fn check(lcu: &Lcu, records: &mut Vec<Record>, stats: Option<Value>) -> bool {
     if let Err(e) = store::append_records(&new) {
         log(&format!("write failed: {e}"));
     }
+    sync::push_async(Some(commit_message(&new)), log);
     records.extend(new);
     true
+}
+
+/// e.g. "Solo/Duo: +23 LP (Win) → Gold II 68 LP"
+fn commit_message(new: &[Record]) -> String {
+    let Some(last) = new.last() else { return "Update LP data".into() };
+    let queue = QUEUES.iter().find(|q| q.0 == last.queue).map(|q| q.2).unwrap_or("Ranked");
+    let rank = common::rank::label(&last.tier, &last.div, last.lp);
+    let games: Vec<&Record> = new.iter().filter(|r| r.is_game()).collect();
+    match games.len() {
+        0 => format!("{queue}: LP update → {rank}"),
+        1 => format!("{queue}: {:+} LP ({}) → {rank}", games[0].delta, if games[0].win { "Win" } else { "Loss" }),
+        n => format!("{queue}: {n} games, {:+} LP → {rank}", games.iter().map(|r| r.delta).sum::<i64>()),
+    }
 }
 
 fn snapshot(queue: &str, s: &Standing, kind: Kind, delta: i64, game_id: i64, win: bool, champ: i64) -> Record {
