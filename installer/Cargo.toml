@@ -1,0 +1,15 @@
+[package]
+name = "lp-graph-setup"
+version.workspace = true
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "LP-Graph-Setup"
+path = "src/main.rs"
+
+[dependencies]
+common = { path = "../common" }
+windows-sys = { workspace = true }
+# only for creating the Start Menu shortcut (COM IShellLink)
+windows = { version = "0.58", features = ["Win32_System_Com", "Win32_UI_Shell", "Win32_Foundation"] }

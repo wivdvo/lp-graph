@@ -15,15 +15,26 @@ Your Riot match history doesn't include LP, so games played before the tracker r
 | Ring | Catch-up: one of several games missed while the tracker was off (the total is exact, the split per game is approximate) |
 | Gray dot | Estimated from match history |
 
+## Install
+
+Download **`LP-Graph-Setup.exe`** from the [latest release](https://github.com/wivdvo/lp-graph/releases/latest) and run it. That's the only file you need:
+
+- It installs both programs to `%LOCALAPPDATA%\Programs\LP Graph` (no admin rights needed), adds **LP Graph** to the Start Menu, starts the tracker and opens the graph.
+- The tracker starts with Windows (turn this off in its tray menu).
+- Running a newer setup over it updates the programs and keeps your data.
+- Uninstall from Windows' **Settings → Apps → Installed apps → LP Graph**. It asks whether to keep your LP history.
+
+The programs aren't code-signed, so Windows SmartScreen may warn the first time ("More info" → "Run anyway").
+
+Setup options: `--quiet` (no dialogs), `--no-start`, `--dir <folder>`; `uninstall.exe --uninstall [--quiet]`.
+
 ## Build
 
 ```powershell
 .\build.ps1
 ```
 
-This runs `cargo build --release`, then `tools/stamp` writes the icon and the names "LP Tracker" / "LP Graph" into the two `.exe` files (using Windows' own resource API, so no resource compiler is needed), and copies them into `bin/`. Or download both programs from the [latest release](https://github.com/wivdvo/lp-graph/releases/latest) and put them in a folder together.
-
-Then run `bin/lp-tracker.exe` once. It adds itself to Windows startup (turn this off in the tray menu, or run `lp-tracker.exe --uninstall`).
+This runs `cargo build --release`, then `tools/stamp` writes the icon and the names "LP Tracker" / "LP Graph" into the two `.exe` files (using Windows' own resource API, so no resource compiler is needed). It then builds `installer/` with both programs embedded into `dist\LP-Graph-Setup.exe`, and copies the programs into `bin/` for development.
 
 ## Data
 

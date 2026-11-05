@@ -1,6 +1,8 @@
 [workspace]
 resolver = "2"
-members = ["common", "tracker", "graph", "tools/stamp"]
+members = ["common", "tracker", "graph", "tools/stamp", "installer"]
+# the installer embeds the built programs, so build.ps1 builds it in a second step
+default-members = ["common", "tracker", "graph", "tools/stamp"]
 
 [workspace.package]
 version = "1.0.0"
