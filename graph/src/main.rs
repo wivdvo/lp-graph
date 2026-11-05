@@ -83,6 +83,10 @@ struct Cache {
     split_start: i64,
     /// Start of the current ranked season (its first split), unix ms. 0 = unknown.
     season_start: i64,
+    /// Every known split (start/end/number), oldest first, from the client.
+    splits: Vec<common::Split>,
+    /// Rank at the end of the previous split per queue, as absolute LP (mid-division guess).
+    prev_split_end: HashMap<String, i64>,
 }
 
 fn cache_path() -> PathBuf {
@@ -112,8 +116,23 @@ fn load_cache() -> Cache {
             }
         }
     }
-    c.split_start = v["splitStart"].as_i64().unwrap_or(0);
-    c.season_start = v["seasonStart"].as_i64().unwrap_or(0);
+    for s in v["splits"].as_array().into_iter().flatten() {
+        c.splits.push(common::Split {
+            start: s[0].as_i64().unwrap_or(0),
+            end: s[1].as_i64().unwrap_or(0),
+            number: s[2].as_i64().unwrap_or(0),
+        });
+    }
+    if let Some(m) = v["prevSplitEnd"].as_object() {
+        for (q, a) in m {
+            if let Some(a) = a.as_i64() {
+                c.prev_split_end.insert(q.clone(), a);
+            }
+        }
+    }
+    let now = now_ms();
+    c.split_start = common::split_at(&c.splits, now).map(|s| s.start).unwrap_or(v["splitStart"].as_i64().unwrap_or(0));
+    c.season_start = common::season_start_at(&c.splits, now).unwrap_or(v["seasonStart"].as_i64().unwrap_or(0));
     if let Some(m) = v["live"].as_object() {
         for (q, s) in m {
             c.live.insert(
@@ -146,7 +165,11 @@ fn save_cache(c: &Cache) {
             (q.clone(), json!({"tier": s.tier, "div": s.div, "lp": s.lp, "w": s.wins, "l": s.losses, "abs": s.abs}))
         })
         .collect();
-    let v = json!({"games": games, "champs": champs, "live": live, "splitStart": c.split_start, "seasonStart": c.season_start});
+    let splits: Vec<Value> = c.splits.iter().map(|s| json!([s.start, s.end, s.number])).collect();
+    let v = json!({
+        "games": games, "champs": champs, "live": live, "splits": splits, "prevSplitEnd": c.prev_split_end,
+        "splitStart": c.split_start, "seasonStart": c.season_start,
+    });
     let tmp = cache_path().with_extension("tmp");
     if std::fs::write(&tmp, v.to_string()).is_ok() {
         let _ = std::fs::rename(&tmp, cache_path());
@@ -216,9 +239,11 @@ fn backfill(hwnd: SendPtr) {
             }
         }
     }
-    if let Some((split, season)) = lcu.season_dates() {
-        cache.split_start = split;
-        cache.season_start = season;
+    if let Some(splits) = lcu.splits().filter(|s| !s.is_empty()) {
+        let now = now_ms();
+        cache.split_start = common::split_at(&splits, now).map(|s| s.start).unwrap_or(0);
+        cache.season_start = common::season_start_at(&splits, now).unwrap_or(0);
+        cache.splits = splits;
     } else if let Some(season) = lcu.get("/lol-seasons/v1/season/product/LOL") {
         // fallback: this only knows the current split
         if let Some(start) = season["seasonStart"].as_i64() {
@@ -229,6 +254,12 @@ fn backfill(hwnd: SendPtr) {
         for (q, _, _) in QUEUES {
             if let Some(s) = rank::standing(&stats, q) {
                 cache.live.insert(q.to_string(), s);
+            }
+            // rank at the end of the previous split; LP within the division is unknown, so use 50
+            let qm = &stats["queueMap"][q];
+            let (t, d) = (qm["previousSeasonEndTier"].as_str().unwrap_or(""), qm["previousSeasonEndDivision"].as_str().unwrap_or(""));
+            if let Some(a) = rank::to_abs(t, d, 50) {
+                cache.prev_split_end.insert(q.to_string(), a);
             }
         }
     }
@@ -595,17 +626,27 @@ fn draw(g: &Gfx, w: i32, h: i32, app: &mut App) {
         Some(c) => {
             let title = rank::label(&c.tier, &c.div, c.lp);
             g.text(s(22.0), s(8.0), &title, tier_color(&c.tier), f_big, 0);
-            let games = c.wins + c.losses;
-            let wr = if games > 0 { c.wins * 100 / games } else { 0 };
+            // W/L for the current split, counted from your games (all kinds have real results);
+            // falls back to the client's numbers when the split start is unknown
+            let split_no = common::split_at(&app.cache.splits, now_ms()).map(|s| s.number).unwrap_or(0);
+            let (wins, losses) = if app.cache.split_start > 0 {
+                let in_split = all.iter().filter(|p| p.t >= app.cache.split_start);
+                let w = in_split.clone().filter(|p| p.win).count() as i64;
+                (w, in_split.count() as i64 - w)
+            } else {
+                (c.wins, c.losses)
+            };
+            let games = wins + losses;
+            let wr = if games > 0 { wins * 100 / games } else { 0 };
+            let split_label = if split_no > 0 { format!("Split {split_no}: ") } else { String::new() };
             let gain_color = |v: i64| if v > 0 { WIN } else if v < 0 { LOSS } else { TEXT };
             let y = s(55.0);
-            let mut x = g.text(s(23.0), y, &format!("{qlabel}  ·  {}W {}L (", c.wins, c.losses), TEXT, f_sub, 0);
+            let mut x = g.text(s(23.0), y, &format!("{qlabel}  ·  {split_label}{wins}W {losses}L ("), TEXT, f_sub, 0);
             x = g.text(x, y, &format!("{wr}%"), TEXT, f_sub_b, 0);
             x = g.text(x, y, ")  ·  Today ", TEXT, f_sub, 0);
             x = g.text(x, y, &format!("{today_net:+} LP"), gain_color(today_net), f_sub_b, 0);
             x = g.text(x, y, "  ·  This week ", TEXT, f_sub, 0);
-            x = g.text(x, y, &format!("{week_net:+} LP"), gain_color(week_net), f_sub_b, 0);
-            g.text(x, y, &format!("  ·  {} games ({n_est} est.)", all.len()), MUTED, f_sub, 0);
+            g.text(x, y, &format!("{week_net:+} LP"), gain_color(week_net), f_sub_b, 0);
         }
         None => {
             g.text(s(22.0), s(8.0), "Unranked", TEXT, f_big, 0);
@@ -666,7 +707,14 @@ fn draw(g: &Gfx, w: i32, h: i32, app: &mut App) {
     };
     // longest win streak over the whole history of this queue (wins/losses are real even for estimates)
     let x = g.text(climb_end, cy_, "      Longest win streak: ", MUTED, f_mid, 0);
-    g.text(x, cy_, &longest_win_streak(&all).to_string(), TEXT, f_mid_b, 0);
+    let x = g.text(x, cy_, &longest_win_streak(&all).to_string(), TEXT, f_mid_b, 0);
+    // countdown until the current split ends
+    if let Some(sp) = common::split_at(&app.cache.splits, now_ms()).filter(|sp| sp.end > now_ms()) {
+        let days = (sp.end - now_ms() + 86_399_999) / 86_400_000;
+        let when = if days <= 1 { "ends today".to_string() } else { format!("ends in {days} days") };
+        let x = g.text(x, cy_, &format!("      Split {} ", sp.number), MUTED, f_mid, 0);
+        g.text(x, cy_, &when, TEXT, f_mid_b, 0);
+    }
 
     // --- footer ---
     let fy = h - s(34.0);
@@ -683,7 +731,9 @@ fn draw(g: &Gfx, w: i32, h: i32, app: &mut App) {
     let (bc, bt) = backup_status(&app.sync);
     let bx = end + s(22.0);
     g.circle(bx, fy + s(8.0), s(4.0), Some(bc), bc, 1);
-    g.text(bx + s(10.0), fy, &bt, MUTED, f_small, 0);
+    let bend = g.text(bx + s(10.0), fy, &bt, MUTED, f_small, 0);
+    // game count for this queue
+    g.text(bend + s(22.0), fy, &format!("{} games ({n_est} estimated)", all.len()), MUTED, f_small, 0);
     let status = STATUS.lock().unwrap().clone();
     // legend (right)
     let mut lx = w - s(28.0);

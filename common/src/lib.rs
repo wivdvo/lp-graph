@@ -115,27 +115,29 @@ impl Lcu {
         serde_json::from_slice(&body).ok()
     }
 
-    /// (current split start, current season start) in unix ms. The client lists each split
-    /// as its own "season" entry with metadata.currentSplit = 1, 2, 3…; the season starts
-    /// with the latest split 1.
-    pub fn season_dates(&self) -> Option<(i64, i64)> {
+    /// Ranked splits of the last two years, oldest first. The client lists each split as its
+    /// own "season" entry with metadata.currentSplit = 1, 2, 3…
+    pub fn splits(&self) -> Option<Vec<Split>> {
         let body = http::post_json(
             self.port,
             "/lol-seasons/v1/allSeasons/product/LOL",
             &self.auth_header,
-            r#"{"lastNYears":1}"#,
+            r#"{"lastNYears":2}"#,
         )?;
         let v: serde_json::Value = serde_json::from_slice(&body).ok()?;
-        let mut splits: Vec<(i64, i64)> = v
+        let mut splits: Vec<Split> = v
             .as_array()?
             .iter()
-            .filter_map(|s| Some((s["seasonStart"].as_i64()?, s["metadata"]["currentSplit"].as_i64().unwrap_or(0))))
+            .filter_map(|s| {
+                Some(Split {
+                    start: s["seasonStart"].as_i64()?,
+                    end: s["seasonEnd"].as_i64().unwrap_or(0),
+                    number: s["metadata"]["currentSplit"].as_i64().unwrap_or(0),
+                })
+            })
             .collect();
-        splits.sort();
-        let now = now_ms();
-        let current = *splits.iter().rev().find(|s| s.0 <= now)?;
-        let season = splits.iter().rev().find(|s| s.0 <= current.0 && s.1 == 1).map(|s| s.0).unwrap_or(current.0);
-        Some((current.0, season))
+        splits.sort_by_key(|s| s.start);
+        Some(splits)
     }
 
     pub fn ranked_stats(&self) -> Option<serde_json::Value> {
@@ -193,6 +195,25 @@ pub fn base64(data: &[u8]) -> String {
         out.push(if c.len() > 2 { T[n as usize & 63] as char } else { '=' });
     }
     out
+}
+
+/// One ranked split (unix ms). `number` is 1, 2 or 3 within its season.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Split {
+    pub start: i64,
+    pub end: i64,
+    pub number: i64,
+}
+
+/// The split that contains `t`, if known.
+pub fn split_at(splits: &[Split], t: i64) -> Option<Split> {
+    splits.iter().rev().find(|s| s.start <= t).copied()
+}
+
+/// Start of the season (its split 1) that contains `t`.
+pub fn season_start_at(splits: &[Split], t: i64) -> Option<i64> {
+    let cur = split_at(splits, t)?;
+    splits.iter().rev().find(|s| s.start <= cur.start && s.number == 1).map(|s| s.start).or(Some(cur.start))
 }
 
 pub const GRAPH_WINDOW_CLASS: &str = "LpGraphWindow";
