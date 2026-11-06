@@ -659,19 +659,22 @@ fn draw(g: &Gfx, w: i32, h: i32, app: &mut App) {
         Some(c) => {
             let title = rank::label(&c.tier, &c.div, c.lp);
             g.text(s(22.0), s(8.0), &title, tier_color(&c.tier), f_big, 0);
-            // W/L for the current split, counted from your games (all kinds have real results);
-            // falls back to the client's numbers when the split start is unknown
-            let split_no = common::split_at(&app.cache.splits, now_ms()).map(|s| s.number).unwrap_or(0);
-            let (wins, losses) = if app.cache.split_start > 0 {
-                let in_split = all.iter().filter(|p| p.t >= app.cache.split_start && p.kind != PtKind::Dodge);
-                let w = in_split.clone().filter(|p| p.win).count() as i64;
-                (w, in_split.count() as i64 - w)
-            } else {
+            // W/L for the season, as the client reports it: it includes games from before the
+            // app's history starts. Falls back to counting your games since the season started.
+            let (wins, losses) = if c.wins + c.losses > 0 {
                 (c.wins, c.losses)
+            } else {
+                let in_season = all.iter().filter(|p| p.t >= app.cache.season_start && p.kind != PtKind::Dodge);
+                let w = in_season.clone().filter(|p| p.win).count() as i64;
+                (w, in_season.count() as i64 - w)
             };
             let games = wins + losses;
             let wr = if games > 0 { wins * 100 / games } else { 0 };
-            let split_label = if split_no > 0 { format!("Split {split_no}: ") } else { String::new() };
+            let split_label = if app.cache.season_start > 0 {
+                format!("Season {}: ", local_time(app.cache.season_start).wYear)
+            } else {
+                "Season: ".to_string()
+            };
             let gain_color = |v: i64| if v > 0 { WIN } else if v < 0 { LOSS } else { TEXT };
             let y = s(55.0);
             let mut x = g.text(s(23.0), y, &format!("{qlabel}  ·  {split_label}{wins}W {losses}L ("), TEXT, f_sub, 0);
