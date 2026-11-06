@@ -129,6 +129,8 @@ fn notify(hwnd: HWND, msg: u32) {
 }
 
 fn open_graph() {
+    // the tracker just received the click, so it may hand foreground rights to the graph
+    unsafe { AllowSetForegroundWindow(ASFW_ANY) };
     if common::focus_graph_window() {
         return; // already open: bring it to the front instead of opening another
     }
@@ -182,7 +184,8 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
     match msg {
         WM_TRAY => {
             match lp as u32 {
-                WM_LBUTTONUP => open_graph(),
+                // tray icon click, or a click on the post-game notification
+                WM_LBUTTONUP | NIN_BALLOONUSERCLICK => open_graph(),
                 WM_RBUTTONUP | WM_CONTEXTMENU => show_menu(hwnd),
                 _ => {}
             }
