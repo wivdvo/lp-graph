@@ -141,3 +141,4 @@
 {"abs":1499,"champ":84,"delta":23,"div":"II","dur":1514,"gameId":8037528485,"kind":"exact","l":39,"lp":99,"queue":"RANKED_SOLO_5x5","queueId":420,"start":1793962900015,"t":1793964414015,"tier":"GOLD","w":36,"win":true}
 {"abs":1523,"champ":84,"delta":24,"div":"I","dur":2307,"gameId":8037547551,"kind":"exact","l":39,"lp":23,"queue":"RANKED_SOLO_5x5","queueId":420,"start":1793965105085,"t":1793967412085,"tier":"GOLD","w":37,"win":true}
 {"abs":1518,"champ":0,"delta":-5,"div":"I","dur":0,"gameId":0,"kind":"dodge","l":39,"lp":18,"queue":"RANKED_SOLO_5x5","queueId":420,"start":0,"t":1793967809961,"tier":"GOLD","w":37,"win":false}
+{"abs":1502,"champ":84,"delta":-16,"div":"I","dur":2148,"gameId":8037821621,"kind":"exact","l":40,"lp":2,"queue":"RANKED_SOLO_5x5","queueId":420,"start":1793984739469,"t":1793986887469,"tier":"GOLD","w":37,"win":false}
