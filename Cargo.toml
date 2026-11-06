@@ -5,7 +5,7 @@ members = ["common", "tracker", "graph", "tools/stamp", "installer"]
 default-members = ["common", "tracker", "graph", "tools/stamp"]
 
 [workspace.package]
-version = "1.0.0"
+version = "1.1.0"
 
 [workspace.dependencies]
 serde_json = "1"
