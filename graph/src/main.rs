@@ -287,7 +287,8 @@ struct App {
     scale: f32,
     // hit areas (client px)
     tabs: [RECT; 2],
-    refresh_btn: RECT,
+    hide_estimates: bool,
+    est_btn: RECT,
     range: usize,
     range_btns: [RECT; 5],
     tracker_btn: RECT,
@@ -305,7 +306,8 @@ thread_local! {
         sync: None,
         scale: 1.0,
         tabs: [RECT { left: 0, top: 0, right: 0, bottom: 0 }; 2],
-        refresh_btn: RECT { left: 0, top: 0, right: 0, bottom: 0 },
+        hide_estimates: false,
+        est_btn: RECT { left: 0, top: 0, right: 0, bottom: 0 },
         range: 0, // Last 30
         range_btns: [RECT { left: 0, top: 0, right: 0, bottom: 0 }; 5],
         tracker_btn: RECT { left: 0, top: 0, right: 0, bottom: 0 },
@@ -633,8 +635,9 @@ fn draw(g: &Gfx, w: i32, h: i32, app: &mut App) {
     let f_sub_b = g.font(17.0, true);
     let (qname, _, qlabel) = QUEUES[app.queue];
     let all = app.series[app.queue].clone();
-    let off = visible_offset(app);
-    let pts = all[off..].to_vec();
+    // vis[i] = index in `all` of the i-th point drawn
+    let vis = visible_indices(app);
+    let pts: Vec<Pt> = vis.iter().map(|&i| all[i].clone()).collect();
 
     // --- header ---
     let cur = current_standing(app, qname);
@@ -697,12 +700,17 @@ fn draw(g: &Gfx, w: i32, h: i32, app: &mut App) {
         app.tabs[i] = r;
         x += tw + s(6.0);
     }
-    let rw = s(80.0);
-    let rx = w - s(20.0) - 2 * tw - s(6.0) - s(10.0) - rw;
-    let rr = rect(rx, ty, rx + rw, ty + th);
-    g.round_rect(rr, PANEL, GRID_TIER, s(8.0));
-    g.text(rx + rw / 2, ty + s(6.0), "Refresh", MUTED, f_mid, 1);
-    app.refresh_btn = rr;
+    // "Estimates" toggle left of the queue tabs (highlighted while estimated games are shown).
+    // No Refresh button: tracked games reload by themselves when the tracker writes, and
+    // match history is read every time the graph opens (F5 still re-reads it).
+    let ew = s(96.0);
+    let ex = w - s(20.0) - 2 * tw - s(6.0) - s(10.0) - ew;
+    let er = rect(ex, ty, ex + ew, ty + th);
+    let on = !app.hide_estimates;
+    g.round_rect(er, if on { GRID_TIER } else { PANEL }, if on { LINE } else { GRID_TIER }, s(8.0));
+    g.circle(ex + s(14.0), ty + th / 2, s(4.0), if on { Some(EST) } else { None }, EST, s(1.5).max(1));
+    g.text(ex + s(24.0), ty + s(6.0), "Estimates", if on { TEXT } else { MUTED }, if on { f_mid_b } else { f_mid }, 0);
+    app.est_btn = er;
 
     // range pills (second row, right-aligned): Last 30 / Last 90 / All
     let pw_ = s(68.0);
@@ -797,7 +805,11 @@ fn draw(g: &Gfx, w: i32, h: i32, app: &mut App) {
 
     if pts.is_empty() {
         let msg = if cur.is_some() {
-            "No ranked games in this queue yet – they'll appear here after your next game."
+            if app.hide_estimates {
+                "No tracked games in this range yet. Turn on Estimates to see older games."
+            } else {
+                "No ranked games in this queue yet – they'll appear here after your next game."
+            }
         } else {
             "No data yet. Open the League client (and keep lp-tracker running)."
         };
@@ -864,7 +876,7 @@ fn draw(g: &Gfx, w: i32, h: i32, app: &mut App) {
     let tick = [1usize, 2, 5, 10, 20, 25, 50, 100, 200].into_iter().find(|&t| n / t <= 10).unwrap_or(500);
     let mut i = 0;
     while i < n {
-        g.text(xpx(i), plot.bottom + s(8.0), &format!("{}", game_no[off + i]), MUTED, f_small, 1);
+        g.text(xpx(i), plot.bottom + s(8.0), &format!("{}", game_no[vis[i]]), MUTED, f_small, 1);
         i += tick;
     }
 
@@ -944,7 +956,7 @@ fn draw(g: &Gfx, w: i32, h: i32, app: &mut App) {
         let title = if p.kind == PtKind::Dodge {
             "Dodge  ·  left champ select".to_string()
         } else {
-            format!("Game {}  ·  {}  ·  {}", game_no[off + i], champ, if p.win { "Win" } else { "Loss" })
+            format!("Game {}  ·  {}  ·  {}", game_no[vis[i]], champ, if p.win { "Win" } else { "Loss" })
         };
         let lines = [
             (title, TEXT, f_mid_b),
@@ -1037,16 +1049,35 @@ fn invalidate(hwnd: HWND) {
 
 const RANGE_LABELS: [&str; 5] = ["Last 30", "Last 90", "This split", "This season", "All"];
 
-/// Index of the first game shown for the selected range.
-fn visible_offset(app: &App) -> usize {
+/// Indices (into the full series) of the points shown: estimated games left out when
+/// they're hidden, then the selected range (Last 30/90 count the remaining points).
+fn visible_indices(app: &App) -> Vec<usize> {
     let pts = &app.series[app.queue];
-    match app.range {
-        0 => pts.len().saturating_sub(30),
-        1 => pts.len().saturating_sub(90),
-        // games since the current split started (as reported by the client)
-        2 => pts.iter().position(|p| p.t >= app.cache.split_start).unwrap_or(pts.len()),
-        3 => pts.iter().position(|p| p.t >= app.cache.season_start).unwrap_or(pts.len()),
+    let shown: Vec<usize> = (0..pts.len()).filter(|&i| !(app.hide_estimates && pts[i].kind == PtKind::Estimated)).collect();
+    let from = |t: i64| shown.iter().position(|&i| pts[i].t >= t).unwrap_or(shown.len());
+    let start = match app.range {
+        0 => shown.len().saturating_sub(30),
+        1 => shown.len().saturating_sub(90),
+        // games since the current split / season started (as reported by the client)
+        2 => from(app.cache.split_start),
+        3 => from(app.cache.season_start),
         _ => 0,
+    };
+    shown[start..].to_vec()
+}
+
+/// "Estimates" toggle, remembered in data\hide-estimates.
+fn hide_estimates_marker() -> PathBuf {
+    store::data_dir().join("hide-estimates")
+}
+
+fn toggle_estimates(app: &mut App) {
+    app.hide_estimates = !app.hide_estimates;
+    app.hover = None;
+    if app.hide_estimates {
+        let _ = std::fs::write(hide_estimates_marker(), b"");
+    } else {
+        let _ = std::fs::remove_file(hide_estimates_marker());
     }
 }
 
@@ -1064,7 +1095,7 @@ fn climb_rate(all: &[Pt]) -> Option<(f64, usize, f64, usize)> {
 }
 
 fn hit_point(app: &App, x: i32, y: i32) -> Option<usize> {
-    let pts = &app.series[app.queue][visible_offset(app)..];
+    let pts = visible_indices(app);
     let p = app.plot;
     let n = pts.len();
     if n == 0 || x < p.left - 10 || x > p.right + 10 || y < p.top - 20 || y > p.bottom + 20 {
@@ -1138,8 +1169,9 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
                         return 1;
                     }
                 }
-                if inside(&app.refresh_btn, x, y) {
-                    return 2;
+                if inside(&app.est_btn, x, y) {
+                    toggle_estimates(&mut app);
+                    return 1;
                 }
                 if inside(&app.tracker_btn, x, y) && !app.tracker_running {
                     return 3;
@@ -1147,7 +1179,6 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
                 0
             });
             match action {
-                2 => start_backfill(hwnd),
                 3 => {
                     start_tracker();
                     std::thread::sleep(std::time::Duration::from_millis(400));
@@ -1169,6 +1200,9 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
                 invalidate(hwnd);
             } else if k == VK_F5 as u32 {
                 start_backfill(hwnd);
+            } else if k == b'E' as u32 {
+                APP.with(|a| toggle_estimates(&mut a.borrow_mut()));
+                invalidate(hwnd);
             }
             0
         }
@@ -1218,6 +1252,7 @@ fn main() {
             let mut app = a.borrow_mut();
             app.scale = scale;
             app.tracker_running = tracker_running();
+            app.hide_estimates = hide_estimates_marker().exists();
             reload(&mut app);
         });
 
