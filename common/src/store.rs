@@ -136,13 +136,19 @@ pub fn append_records(recs: &[Record]) -> std::io::Result<()> {
 }
 
 /// Average LP gained per win and lost per loss (both positive) from exact records.
+/// LP can't drop below 0, so a loss that ends at 0 LP only cost the LP that was left
+/// (or nothing). Such losses don't show the normal LP loss and are left out of averages.
+pub fn loss_hit_floor(lp_after: i64) -> bool {
+    lp_after == 0
+}
+
 pub fn averages(records: &[Record], queue: &str) -> (f64, f64) {
     let (mut ws, mut wn, mut ls, mut ln) = (0i64, 0i64, 0i64, 0i64);
     for r in records.iter().filter(|r| r.queue == queue && r.kind == Kind::Exact) {
         if r.win && r.delta > 0 {
             ws += r.delta;
             wn += 1;
-        } else if !r.win && r.delta < 0 {
+        } else if !r.win && r.delta < 0 && !loss_hit_floor(r.lp) {
             ls += -r.delta;
             ln += 1;
         }
@@ -166,4 +172,25 @@ pub fn split_delta(total: i64, wins: &[bool], avg: (f64, f64)) -> Vec<i64> {
         *last += diff;
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn game(win: bool, delta: i64, lp: i64) -> Record {
+        Record {
+            t: 0, queue: "Q".into(), tier: "GOLD".into(), div: "I".into(), lp, wins: 0, losses: 0, abs: 0,
+            delta, game_id: 0, champ: 0, win, kind: Kind::Exact, start: 0, duration: 0,
+        }
+    }
+
+    #[test]
+    fn losses_ending_at_zero_lp_are_left_out() {
+        // -9 (9 -> 0) and 0 (already at 0) were cut short by the floor
+        let recs = vec![game(false, -18, 4), game(false, -9, 0), game(false, 0, 0), game(false, -16, 40), game(true, 23, 63)];
+        let (w, l) = averages(&recs, "Q");
+        assert_eq!(w, 23.0);
+        assert_eq!(l, 17.0);
+    }
 }

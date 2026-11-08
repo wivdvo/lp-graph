@@ -1084,12 +1084,15 @@ fn toggle_estimates(app: &mut App) {
     }
 }
 
-/// Average LP of the last 3 exact wins and last 3 exact losses (estimates and
-/// catch-up splits excluded). Returns (win avg, #wins, loss avg as positive, #losses).
+/// Average LP of the last 3 exact wins and last 3 exact losses (estimates and catch-up
+/// splits excluded; losses that ended at 0 LP skipped). Returns (win avg, #wins, loss avg
+/// as positive, #losses).
 fn climb_rate(all: &[Pt]) -> Option<(f64, usize, f64, usize)> {
     let exact = || all.iter().rev().filter(|p| p.kind == PtKind::Exact);
     let wins: Vec<i64> = exact().filter(|p| p.win).take(3).map(|p| p.delta).collect();
-    let losses: Vec<i64> = exact().filter(|p| !p.win).take(3).map(|p| -p.delta).collect();
+    // losses that ended at 0 LP were cut short by the 0 LP floor: skip them
+    let losses: Vec<i64> =
+        exact().filter(|p| !p.win && !store::loss_hit_floor(rank::from_abs(p.abs).2)).take(3).map(|p| -p.delta).collect();
     if wins.is_empty() || losses.is_empty() {
         return None;
     }
