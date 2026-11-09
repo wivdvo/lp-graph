@@ -647,11 +647,11 @@ fn draw(g: &Gfx, w: i32, h: i32, app: &mut App) {
         .filter(|p| p.kind != PtKind::Estimated && same_day(&local_time(p.t), &today))
         .map(|p| p.delta)
         .sum();
-    // week starts Monday 00:00 local time
-    let monday = day_number(&today) - ((today.wDayOfWeek as i64 + 6) % 7);
+    // rolling 7 days: everything from exactly one week ago until now
+    let week_ago = now_ms() - 7 * 86_400_000;
     let week_net: i64 = all
         .iter()
-        .filter(|p| p.kind != PtKind::Estimated && day_number(&local_time(p.t)) >= monday)
+        .filter(|p| p.kind != PtKind::Estimated && p.t >= week_ago)
         .map(|p| p.delta)
         .sum();
     let n_est = all.iter().filter(|p| p.kind == PtKind::Estimated).count();
@@ -681,7 +681,7 @@ fn draw(g: &Gfx, w: i32, h: i32, app: &mut App) {
             x = g.text(x, y, &format!("{wr}%"), TEXT, f_sub_b, 0);
             x = g.text(x, y, ")  ·  Today ", TEXT, f_sub, 0);
             x = g.text(x, y, &format!("{today_net:+} LP"), gain_color(today_net), f_sub_b, 0);
-            x = g.text(x, y, "  ·  This week ", TEXT, f_sub, 0);
+            x = g.text(x, y, "  ·  Last 7 days ", TEXT, f_sub, 0);
             g.text(x, y, &format!("{week_net:+} LP"), gain_color(week_net), f_sub_b, 0);
         }
         None => {
@@ -1307,17 +1307,6 @@ fn main() {
             DispatchMessageW(&msg);
         }
     }
-}
-
-/// Days since 1970-01-01 for a (local) date; used for "this week" comparisons.
-fn day_number(t: &SYSTEMTIME) -> i64 {
-    let (y, m, d) = (t.wYear as i64, t.wMonth as i64, t.wDay as i64);
-    let y = if m <= 2 { y - 1 } else { y };
-    let era = y.div_euclid(400);
-    let yoe = y - era * 400;
-    let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    era * 146_097 + doe - 719_468
 }
 
 /// Most wins in a row among these games.
