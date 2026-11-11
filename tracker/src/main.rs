@@ -179,6 +179,9 @@ fn session(lcu: &Lcu) {
                         sleep(Duration::from_secs(2));
                     }
                 }
+                if ev["data"].as_str() == Some("EndOfGame") {
+                    save_end_of_game(lcu);
+                }
             }
             "/lol-ranked/v1/current-ranked-stats" => {
                 let data = ev["data"].clone();
@@ -242,7 +245,17 @@ fn check(lcu: &Lcu, records: &mut Vec<Record>, stats: Option<Value>) -> bool {
     true
 }
 
-/// Post-game notification: ("Win · +23 LP", "Solo/Duo → Gold II 92 LP"). None for snapshots.
+/// Saves the client's end-of-game data (what the post-game screen shows, e.g. its W/L line)
+/// to data\eog-last.json next to the ranked stats at that moment, so differences between
+/// the two can be checked. It only exists while the post-game screen is open.
+fn save_end_of_game(lcu: &Lcu) {
+    let eog = lcu.get("/lol-end-of-game/v1/eog-stats-block").unwrap_or(Value::Null);
+    let stats = lcu.ranked_stats().map(|s| s["queueMap"].clone()).unwrap_or(Value::Null);
+    let v = serde_json::json!({ "t": now_ms(), "eogStatsBlock": eog, "rankedStatsQueueMap": stats });
+    let _ = std::fs::write(store::data_dir().join("eog-last.json"), v.to_string());
+}
+
+/// Post-game notification:("Win · +23 LP", "Solo/Duo → Gold II 92 LP"). None for snapshots.
 fn notification_text(new: &[Record]) -> Option<(String, String)> {
     let last = new.last()?;
     let queue = QUEUES.iter().find(|q| q.0 == last.queue).map(|q| q.2).unwrap_or("Ranked");
