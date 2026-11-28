@@ -208,3 +208,4 @@
 {"abs":1604,"champ":84,"delta":-20,"div":"IV","dur":2547,"gameId":8059376027,"kind":"exact","l":61,"lp":4,"queue":"RANKED_SOLO_5x5","queueId":420,"start":1795864652828,"t":1795867199828,"tier":"PLATINUM","w":58,"win":false}
 {"abs":1600,"champ":84,"delta":-4,"div":"IV","dur":1512,"gameId":8059420469,"kind":"exact","l":62,"lp":0,"queue":"RANKED_SOLO_5x5","queueId":420,"start":1795867661485,"t":1795869173485,"tier":"PLATINUM","w":58,"win":false}
 {"abs":1600,"champ":84,"delta":0,"div":"IV","dur":1887,"gameId":8059434882,"kind":"exact","l":63,"lp":0,"queue":"RANKED_SOLO_5x5","queueId":420,"start":1795869526359,"t":1795871413359,"tier":"PLATINUM","w":58,"win":false}
+{"abs":1200,"champ":48,"delta":-20,"div":"IV","dur":1141,"gameId":8059479489,"kind":"exact","l":77,"lp":0,"queue":"RANKED_FLEX_SR","queueId":440,"start":1795872321578,"t":1795873462578,"tier":"GOLD","w":78,"win":false}
